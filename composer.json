@@ -1,0 +1,25 @@
+{
+    "name": "simbiat/optimize-tables",
+    "type": "library",
+    "keywords": ["optimize","mysql","pdo","table","php"],
+    "description": "Library optimize tables in database.",
+    "homepage": "https://github.com/Simbiat/optimize-table",
+    "license": "MIT",
+    "authors": [
+        {
+            "name": "Dmitry Kustov",
+            "email": "simbiat@outlook.com",
+            "homepage": "https://simbiat.ru",
+            "role": "Developer"
+        }
+    ],
+    "require": {
+        "php": "^7.0.7",
+        "simbiat/database": "*"
+    },
+    "autoload": {
+        "psr-0": {
+            "optimizeTables\\": "/"
+        }
+    }
+}
