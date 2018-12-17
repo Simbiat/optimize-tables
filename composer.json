@@ -21,5 +21,9 @@
         "psr-0": {
             "optimizeTables\\": "/"
         }
-    }
+    },
+	"support": {
+		"issues": "https://github.com/Simbiat/optimize-tables/issues",
+		"source": "https://github.com/Simbiat/optimize-tables"
+	}
 }
