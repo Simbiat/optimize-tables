@@ -9,6 +9,7 @@ One may think that simply getting list of tables and running OPTIMZE against the
 - ANALYZE is quite useful a command as well, allowing to update MySQL statistics, that may improve some of SELECTs.
 - MardiaDB 10.4+ and MySQL 8.0+ also support histograms, that may improve SELECTs in cases when a column does not have indexes for some reason.
 - No matter how useful these commands are, there are cases when you do not need to run them, especially on large tables, since they may take quite some time to complete. Simplest case: there were no or very little changes since last time the OPTIMIZE was run.
+
 This library aims to cover all these points in as smart a manner, as was possible at the moment of writing. For details refer Usage section of this readme or comments in the code.
 
 # Requirements
