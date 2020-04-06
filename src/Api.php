@@ -445,6 +445,31 @@ class Api
         return false;
     }
     
+    #Enable or disable maintenance mode if using any
+    private function runMaintenance(string $schema, $on = true): bool
+    {
+        #Checking if the details for maintenance flag was provided
+        if ($this->getMaintenance() !== null) {
+            #Adding schema for consistency
+            $maintquery = str_replace('UPDATE `', 'UPDATE `'.$schema.'`.`', $this->getMaintenance());
+            if ($on === false) {
+                #Replace true by false for disabling maintenance
+                $maintquery = str_replace('true', 'false', $maintquery);
+            }
+            $this->log('Attempting to '.($on ? 'en' : 'dis').'able maintenance mode using \''.$maintquery.'\'...');
+            try {
+                $this->db_controller->query($maintquery);
+                $this->log('Maintenance mode '.($on === true ? 'en' : 'dis').'abled.');
+                return true;
+            } catch (\Exception $e) {
+                $this->log('Failed to '.($on === true ? 'en' : 'dis').'able maintenance mode using \''.$maintquery.'\' with error: '.$e->getMessage());
+                return false;
+            }
+        } else {
+            return true;
+        }
+    }
+    
     #####################
     #  JSON functions   #
     #####################
@@ -678,27 +703,6 @@ class Api
             }
         }
         return false;
-    }
-    
-    #Enable or disable maintenance mode if using any
-    private function runMaintenance(string $schema, $on = true): bool
-    {
-        #Checking if the details for maintenance flag was provided
-        if ($this->getMaintenance() !== null) {
-            #Adding schema for consistency
-            $maintquery = str_replace('UPDATE `', 'UPDATE `'.$schema.'`.`', $this->getMaintenance());
-            $this->log('Attempting to '.($on ? 'en' : 'dis').'able maintenance mode using \''.$maintquery.'\'...');
-            try {
-                $this->db_controller->query($maintquery);
-                $this->log('Maintenance mode '.($on === true ? 'en' : 'dis').'abled.');
-                return true;
-            } catch (\Exception $e) {
-                $this->log('Failed to '.($on === true ? 'en' : 'dis').'able maintenance mode using \''.$maintquery.'\' with error: '.$e->getMessage());
-                return false;
-            }
-        } else {
-            return true;
-        }
     }
     
     #Function to exclude tables from histogram creation with support of columns exclusion for MySQL 8+ histograms
