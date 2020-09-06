@@ -4,7 +4,7 @@
     "keywords": ["optimize","mysql","pdo","table","php"],
     "description": "Library optimize tables in database.",
     "homepage": "https://github.com/Simbiat/optimize-table",
-    "license": "MIT",
+    "license": "AGPL-3.0-or-later",
     "authors": [
         {
             "name": "Dmitry Kustov",
