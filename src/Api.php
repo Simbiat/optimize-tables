@@ -119,7 +119,14 @@ class Api
         if ($this->schema === '') {
             $this->schema = $schema;
         }
-        $tables = $this->db_controller->selectAll('SELECT `TABLE_NAME`, `ENGINE`, `ROW_FORMAT`, `TABLE_ROWS`, `DATA_LENGTH`, `INDEX_LENGTH`, `DATA_FREE`, (`DATA_LENGTH`+`INDEX_LENGTH`+`DATA_FREE`) AS `TOTAL_LENGTH`, `DATA_FREE`/(`DATA_LENGTH`+`INDEX_LENGTH`+`DATA_FREE`)*100 AS `FRAGMENTATION`,IF(EXISTS(SELECT `INDEX_TYPE` FROM `information_schema`.`STATISTICS` WHERE `information_schema`.`STATISTICS`.`TABLE_SCHEMA`=`information_schema`.`TABLES`.`TABLE_SCHEMA` AND `information_schema`.`STATISTICS`.`TABLE_NAME`=`information_schema`.`TABLES`.`TABLE_NAME` AND `INDEX_TYPE` LIKE \'%FULLTEXT%\'), TRUE, FALSE) AS `FULLTEXT` FROM `information_schema`.`TABLES` WHERE `TABLE_SCHEMA`=\''.$this->schema.'\' AND `TEMPORARY`!=\'Y\' ORDER BY `TABLE_NAME` ASC;');
+        #We need to check that `TEMPORARY` column is avialable in `TABLES` table, because there are cases, when it's no available on shared hosting
+        $temptablecheck = $this->db_controller->selectAll('SELECT `COLUMN_NAME` FROM `information_schema`.`COLUMNS` WHERE `TABLE_SCHEMA` = \'information_schema\' AND `TABLE_NAME` = \'TABLES\' AND `COLUMN_NAME` = \'TEMPORARY\';');
+        if (!empty($temptablecheck) && is_array($temptablecheck)) {
+            $temptablecheck = true;
+        } else {
+            $temptablecheck = false;
+        }
+        $tables = $this->db_controller->selectAll('SELECT `TABLE_NAME`, `ENGINE`, `ROW_FORMAT`, `TABLE_ROWS`, `DATA_LENGTH`, `INDEX_LENGTH`, `DATA_FREE`, (`DATA_LENGTH`+`INDEX_LENGTH`+`DATA_FREE`) AS `TOTAL_LENGTH`, `DATA_FREE`/(`DATA_LENGTH`+`INDEX_LENGTH`+`DATA_FREE`)*100 AS `FRAGMENTATION`,IF(EXISTS(SELECT `INDEX_TYPE` FROM `information_schema`.`STATISTICS` WHERE `information_schema`.`STATISTICS`.`TABLE_SCHEMA`=`information_schema`.`TABLES`.`TABLE_SCHEMA` AND `information_schema`.`STATISTICS`.`TABLE_NAME`=`information_schema`.`TABLES`.`TABLE_NAME` AND `INDEX_TYPE` LIKE \'%FULLTEXT%\'), TRUE, FALSE) AS `FULLTEXT` FROM `information_schema`.`TABLES` WHERE `TABLE_SCHEMA`=\''.$this->schema.'\''.($temptablecheck === true ? 'AND `TEMPORARY`!=\'Y\'' : '').' ORDER BY `TABLE_NAME` ASC;');
         #Replacing numeric keys with actual tables' names for future use with JSON data
         $tables = array_combine(array_column($tables, 'TABLE_NAME'), $tables);
         #Setting preoptimization settings
