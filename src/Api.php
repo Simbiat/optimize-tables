@@ -405,32 +405,11 @@ class Api
     {
         $action = strtolower($action);
         if ($this->checkAction($action)) {
-            switch ($action) {
-                case 'compress':
-                case 'check':
-                case 'repair':
-                    $verbs = [
-                        'start' => ucfirst($action).'ing',
-                        'success' => $action.'ed',
-                        'failure' => $action,
-                    ];
-                    break;
-                case 'histogram':
-                    $verbs = [
-                        'start' => 'Creating histograms for',
-                        'success' => 'created histograms for',
-                        'failure' => 'create histograms for',
-                    ];
-                    break;
-                case 'analyze':
-                case 'optimize':
-                    $verbs = [
-                        'start' => substr(ucfirst($action), 0, -1).'ing',
-                        'success' => $action.'d',
-                        'failure' => $action,
-                    ];
-                    break;
-            }
+            $verbs = match($action) {
+                'compress', 'check', 'repair' => ['start' => ucfirst($action).'ing', 'success' => $action.'ed', 'failure' => $action],
+                'histogram' => ['start' => 'Creating histograms for','success' => 'created histograms for', 'failure' => 'create histograms for'],
+                'analyze', 'optimize' => ['start' => substr(ucfirst($action), 0, -1).'ing', 'success' => $action.'d', 'failure' => $action],
+            };
             try {
                 if ($fulltext) {
                     $this->log('Enabling FULLTEXT optimization for `'.$name.'`...');
@@ -453,7 +432,7 @@ class Api
     }
     
     #Enable or disable maintenance mode if using any
-    private function runMaintenance(string $schema, $on = true): bool
+    private function runMaintenance(string $schema, bool $on = true): bool
     {
         #Checking if the details for maintenance flag was provided
         if ($this->getMaintenance() !== null) {
@@ -713,7 +692,7 @@ class Api
     }
     
     #Function to exclude tables from histogram creation with support of columns exclusion for MySQL 8+ histograms
-    private function excludeHistogram(string $table, $column = NULL): void
+    private function excludeHistogram(string $table, string|array|null $column = NULL): void
     {
         $this->exclude['histogram'][$table] = [];
         if (!is_null($column)) {
@@ -853,7 +832,7 @@ class Api
         }
     }
     
-    public function setExclusions(string $action, string $table, $column = NULL): self
+    public function setExclusions(string $action, string $table, string|array|null $column = NULL): self
     {
         #Do not do anything if no table name is provided or table name consists of bad characters or patterns
         if ($table !== '' && preg_match('/(.*[^\x{0001}-\x{FFFF}].*)|(.*\s{1,}$)|(^\d{1,}$)|(^\d{1,}e\d{1,}.*)(^$)/miu', $table) === 0) {
