@@ -15,7 +15,7 @@
     ],
     "require": {
         "php": "^8",
-        "simbiat/database": "^1.1.1+20200401"
+        "simbiat/database": "^2"
     },
     "autoload": {
         "psr-4": {
