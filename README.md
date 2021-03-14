@@ -19,7 +19,7 @@ This library aims to cover all these points in as smart a manner, as was possibl
 # Usage
 To use the library you need to establish connection with your database through [SimbiatDB](https://github.com/Simbiat/database) library and then call this:
 ```php
-(new \optimizeTables\Api)->analyze('schema');
+(new \Simbiat\optimizeTables)->analyze('schema');
 ```
 The output will look like this:
 ```php
@@ -61,7 +61,7 @@ array (
 `schema` means the name of the database/schema you want to analyze. This command will show you the list (as an array) of tables with some statistics and list of optimization commands they can/should be run for each table.
 After this you have an option to run them manually if you like some control. Alternatively, if you want to use the library in a `cron` or other scheduler you can run this:
 ```php
-(new \optimizeTables\Api)->optimize('schema');
+(new \Simbiat\optimizeTables)->optimize('schema');
 ```
 This will analyze the tables and then run the suggested commands. The result of the function (by default) will be array of log entries, where array keys are UNIX micro timestamps:
 ```php
@@ -155,12 +155,12 @@ This will also create a `tables.json` file with some more statistics, that will 
 ```
 There is also possibility to get statistics from the last run by:
 ```php
-(new \optimizeTables\Api)->showStats();
+(new \Simbiat\optimizeTables)->showStats();
 ```
 This will show all tables, that were either compressed or had changes in their size statistics.
 In case you want these statistics to be returned instead of logs, you run this:
 ```php
-(new \optimizeTables\Api)->optimize('schema', true);
+(new \Simbiat\optimizeTables)->optimize('schema', true);
 ```
 And this is it - easy to use. But there are also some settings, that will allow you more control on what is done by `optimize()`.
 

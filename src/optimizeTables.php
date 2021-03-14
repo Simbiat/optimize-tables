@@ -1,8 +1,8 @@
 <?php
 declare(strict_types=1);
-namespace optimizeTables;
+namespace Simbiat;
 
-class Api
+class optimizeTables
 {
     private object $dbh;
     private object $db_controller;
@@ -77,8 +77,8 @@ class Api
     
     public function __construct()
     {
-        $this->dbh = (new \SimbiatDB\Pool)->openConnection();
-        $this->db_controller = (new \SimbiatDB\Controller);
+        $this->dbh = (new \Simbiat\Database\Pool)->openConnection();
+        $this->db_controller = (new \Simbiat\Database\Controller);
         #Checking if we are using 'file per table' for INNODB tables
         $innodb_file_per_table = $this->db_controller->selectColumn('SHOW GLOBAL VARIABLES WHERE `variable_name`=\'innodb_file_per_table\';', [], 1)[0];
         #Checking INNODB format
