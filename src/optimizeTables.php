@@ -201,86 +201,98 @@ class optimizeTables
         return $tables;
     }
     
-    public function optimize(string $schema, bool $showstats = false): array
+    public function optimize(string $schema, bool $showstats = false, bool $silent = false): bool|array|string
     {
-        #Getting JSON data from previous runs (if any)
-        if ($this->jsondata === []) {
-            $this->jsonInit();
-        }
-        if ($this->schema === '') {
-            $this->schema = $schema;
-        }
-        #Getting initial list of tables to process
-        $this->log('Getting list of tables...');
-        $tables = $this->jsondata['before'] = $this->analyze($this->schema, true);
-        #Skip any actions, if no tables for actions were returned
-        if (array_search(true, array_column($tables, 'TO_COMPRESS')) === false && array_search(true, array_column($tables, 'TO_OPTIMIZE')) === false && array_search(true, array_column($tables, 'TO_CHECK')) === false && array_search(true, array_column($tables, 'TO_REPAIR')) === false && array_search(true, array_column($tables, 'TO_ANALYZE')) === false && array_search(true, array_column($tables, 'TO_HISTOGRAM')) === false) {
-            $this->log('No tables to process were returned. Skipping...');
-            $this->jsonDump(false);
-            return $this->jsondata['logs'];
-        }
-        #Sorting by size of tables, to deal with smaller ones first
-        array_multisort(array_column($tables, 'TOTAL_LENGTH'), SORT_ASC, $tables);
-        #Attempting to prevent timeouts
-        set_time_limit(0);
-        #Applying optimization settings
-        $this->toSetup(true);
-        #Checking for tables, that need to be compressed
-        $refresh = false;
-        foreach ($tables as $name=>$data) {
-            if ($data['TO_COMPRESS'] && $this->toRun('compress', $name, $data['COMPRESS'])) {
-                $refresh = true;
+        try {
+            #Getting JSON data from previous runs (if any)
+            if ($this->jsondata === []) {
+                $this->jsonInit();
             }
-        }
-        #Refresh $tables, so that tables, that were compressed, get reevaluated (most likely they will not require optimization)
-        if ($refresh) {
-            #Refresh $tables, so that tables get reevaluated
-            $this->log('Updating tables list after compression...');
-            $tables = $this->analyze($this->schema, true);
-        }
-        #Checking for tables, that have fulltext indexes. We need to first optimize them using fulltext_only, because there is a chance, they will not require further optimization afterwards
-        $refresh = false;
-        #Checking if refreshed list is not empty
-        if (!empty($tables)) {
+            if ($this->schema === '') {
+                $this->schema = $schema;
+            }
+            #Getting initial list of tables to process
+            $this->log('Getting list of tables...');
+            $tables = $this->jsondata['before'] = $this->analyze($this->schema, true);
+            #Skip any actions, if no tables for actions were returned
+            if (array_search(true, array_column($tables, 'TO_COMPRESS')) === false && array_search(true, array_column($tables, 'TO_OPTIMIZE')) === false && array_search(true, array_column($tables, 'TO_CHECK')) === false && array_search(true, array_column($tables, 'TO_REPAIR')) === false && array_search(true, array_column($tables, 'TO_ANALYZE')) === false && array_search(true, array_column($tables, 'TO_HISTOGRAM')) === false) {
+                $this->log('No tables to process were returned. Skipping...');
+                $this->jsonDump(false);
+                if ($silent === true) {
+                    return true;
+                } else {
+                    return $this->jsondata['logs'];
+                }
+            }
+            #Sorting by size of tables, to deal with smaller ones first
+            array_multisort(array_column($tables, 'TOTAL_LENGTH'), SORT_ASC, $tables);
+            #Attempting to prevent timeouts
+            set_time_limit(0);
+            #Applying optimization settings
+            $this->toSetup(true);
+            #Checking for tables, that need to be compressed
+            $refresh = false;
             foreach ($tables as $name=>$data) {
-                if ($data['FULLTEXT'] && $data['TO_OPTIMIZE'] && $this->toRun('optimize', $name, $data['OPTIMIZE'], true)) {
+                if ($data['TO_COMPRESS'] && $this->toRun('compress', $name, $data['COMPRESS'])) {
                     $refresh = true;
                 }
             }
-        }
-        if ($refresh) {
-            #Refresh $tables, so that tables get reevaluated
-            $this->log('Updating tables list after FULLTEXT optimization...');
-            $tables = $this->analyze($this->schema, true);
-        }
-        #Doing the rest of optimization if any
-        #Checking if refreshed list is not empty
-        if (!empty($tables)) {
-            foreach ($tables as $name=>$data) {
-                if ($data['TO_OPTIMIZE']) {
-                    $this->toRun('optimize', $name, $data['OPTIMIZE']);
-                }
-                if ($data['TO_CHECK']) {
-                    $this->toRun('check', $name, $data['CHECK']);
-                }
-                if ($data['TO_REPAIR']) {
-                    $this->toRun('repair', $name, $data['REPAIR']);
-                }
-                if ($data['TO_ANALYZE']) {
-                    $this->toRun('analyze', $name, $data['ANALYZE']);
-                }
-                if ($data['TO_HISTOGRAM']) {
-                    $this->toRun('histogram', $name, $data['HISTOGRAM']);
+            #Refresh $tables, so that tables, that were compressed, get reevaluated (most likely they will not require optimization)
+            if ($refresh) {
+                #Refresh $tables, so that tables get reevaluated
+                $this->log('Updating tables list after compression...');
+                $tables = $this->analyze($this->schema, true);
+            }
+            #Checking for tables, that have fulltext indexes. We need to first optimize them using fulltext_only, because there is a chance, they will not require further optimization afterwards
+            $refresh = false;
+            #Checking if refreshed list is not empty
+            if (!empty($tables)) {
+                foreach ($tables as $name=>$data) {
+                    if ($data['FULLTEXT'] && $data['TO_OPTIMIZE'] && $this->toRun('optimize', $name, $data['OPTIMIZE'], true)) {
+                        $refresh = true;
+                    }
                 }
             }
-        }
-        #Reverting settings
-        $this->toDefault(true);
-        $this->jsonDump();
-        if ($showstats) {
-            return $this->showStats();
-        } else {
-            return $this->jsondata['logs'];
+            if ($refresh) {
+                #Refresh $tables, so that tables get reevaluated
+                $this->log('Updating tables list after FULLTEXT optimization...');
+                $tables = $this->analyze($this->schema, true);
+            }
+            #Doing the rest of optimization if any
+            #Checking if refreshed list is not empty
+            if (!empty($tables)) {
+                foreach ($tables as $name=>$data) {
+                    if ($data['TO_OPTIMIZE']) {
+                        $this->toRun('optimize', $name, $data['OPTIMIZE']);
+                    }
+                    if ($data['TO_CHECK']) {
+                        $this->toRun('check', $name, $data['CHECK']);
+                    }
+                    if ($data['TO_REPAIR']) {
+                        $this->toRun('repair', $name, $data['REPAIR']);
+                    }
+                    if ($data['TO_ANALYZE']) {
+                        $this->toRun('analyze', $name, $data['ANALYZE']);
+                    }
+                    if ($data['TO_HISTOGRAM']) {
+                        $this->toRun('histogram', $name, $data['HISTOGRAM']);
+                    }
+                }
+            }
+            #Reverting settings
+            $this->toDefault(true);
+            $this->jsonDump();
+            if ($silent === true) {
+                return true;
+            } else {
+                if ($showstats) {
+                    return $this->showStats();
+                } else {
+                    return $this->jsondata['logs'];
+                }
+            }
+        } catch(Exception $e) {
+            return $e->getMessage()."\r\n".$e->getTraceAsString();
         }
     }
     
