@@ -162,6 +162,11 @@ In case you want these statistics to be returned instead of logs, you run this:
 ```php
 (new \Simbiat\optimizeTables)->optimize('schema', true);
 ```
+If you want to work with regular booleans, you can send one extra `true`:
+```php
+(new \Simbiat\optimizeTables)->optimize('schema', true, true);
+```
+
 And this is it - easy to use. But there are also some settings, that will allow you more control on what is done by `optimize()`.
 
 # Settings

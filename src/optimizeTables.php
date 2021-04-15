@@ -292,7 +292,11 @@ class optimizeTables
                 }
             }
         } catch(Exception $e) {
-            return $e->getMessage()."\r\n".$e->getTraceAsString();
+            if ($silent === true) {
+                return false;
+            } else {
+                return $e->getMessage()."\r\n".$e->getTraceAsString();
+            }
         }
     }
     
