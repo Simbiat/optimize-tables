@@ -74,8 +74,11 @@ class optimizeTables
     ];
     #Time of optimization take on class initation
     private int $curtime = 0;
+    #Flag for whether CRON is used
+    private ?\Simbiat\Cron $cronPrefix = NULL;
+    private bool $cronEnable = false;
     
-    public function __construct()
+    public function __construct(string $cronPrefix = 'cron__')
     {
         $this->dbh = (new \Simbiat\Database\Pool)->openConnection();
         $this->db_controller = (new \Simbiat\Database\Controller);
@@ -107,6 +110,15 @@ class optimizeTables
             }
         }
         $this->curtime = time();
+        #Checking if CRON is used
+        if (method_exists('\Simbiat\Cron','setSetting')) {
+            if (empty($cronPrefix)) {
+                $this->cron = (new \Simbiat\Cron('cron__'));
+            } else {
+                $this->cron = (new \Simbiat\Cron($cronPrefix));
+            }
+            $this->cronEnable = $this->cron::$enabled;
+        }
     }
     
     public function analyze(string $schema, bool $auto = false): array
@@ -291,7 +303,7 @@ class optimizeTables
                     return $this->jsondata['logs'];
                 }
             }
-        } catch(Exception $e) {
+        } catch(\Exception $e) {
             if ($silent === true) {
                 return false;
             } else {
@@ -450,6 +462,10 @@ class optimizeTables
     #Enable or disable maintenance mode if using any
     private function runMaintenance(string $schema, bool $on = true): bool
     {
+        #Update CRON if supported
+        if ($this->cron !== NULL && $this->cronEnable === true) {
+            $this->cron>setSetting('enable', $on);
+        }
         #Checking if the details for maintenance flag was provided
         if ($this->getMaintenance() !== null) {
             #Adding schema for consistency
@@ -471,6 +487,7 @@ class optimizeTables
             return true;
         }
     }
+    
     
     #####################
     #  JSON functions   #

@@ -166,6 +166,10 @@ If you want to work with regular booleans, you can send one extra `true`:
 ```php
 (new \Simbiat\optimizeTables)->optimize('schema', true, true);
 ```
+Class supports disabling [\Simbiat\Cron](https://github.com/Simbiat/Cron) if it's present. If non-standard ('cron__') prefix is used for Cron, you need to pass it when creating the object:
+```php
+(new \Simbiat\optimizeTables('alt__'));
+```
 
 And this is it - easy to use. But there are also some settings, that will allow you more control on what is done by `optimize()`.
 
