@@ -783,7 +783,7 @@ class optimizeTables
     public function getJsonPath(): string
     {
         if ($this->jsonpath === '') {
-            return sys_get_temp_dir().'/tables.json';
+            return dirname(__DIR__).'/tables.json';
         } else {
             return $this->jsonpath;
         }
