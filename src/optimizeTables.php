@@ -304,11 +304,7 @@ class optimizeTables
                 }
             }
         } catch(\Exception $e) {
-            if ($silent === true) {
-                return false;
-            } else {
-                return $e->getMessage()."\r\n".$e->getTraceAsString();
-            }
+            return $e->getMessage()."\r\n".$e->getTraceAsString();
         }
     }
     
@@ -464,7 +460,7 @@ class optimizeTables
     {
         #Update CRON if supported
         if ($this->cron !== NULL && $this->cronEnable === true) {
-            $this->cron>setSetting('enable', $on);
+            $this->cron->setSetting('enabled', ($on === true ? 0 : 1));
         }
         #Checking if the details for maintenance flag was provided
         if ($this->getMaintenance() !== null) {
