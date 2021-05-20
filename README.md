@@ -2,13 +2,13 @@
 This library is developed to allow bulk optimization of tables in MySQL (MariaDB and, potentially, other forks). While MS SQL has its Maintenance Plan Wizard, there is nothing like that for MySQL.
 
 # Benefits
-One may think that simply getting list of tables and running OPTIMZE against them is enough, but in reality, it's not that simple:
+One may think that simply getting list of tables and running OPTIMIZE against them is enough, but in reality, it's not that simple:
 - Not all tables support OPTIMIZE.
 - There are some special parameters that may improve OPTIMIZE results in some cases.
 - Some tables may benefit from CHECK and REPAIR commands as well. In fact, it's useful to periodically run CHECK to avoid potential corruption of a table.
-- ANALYZE is quite useful a command as well, allowing to update MySQL statistics, that may improve some of SELECTs.
-- MardiaDB 10.4+ and MySQL 8.0+ also support histograms, that may improve SELECTs in cases when a column does not have indexes for some reason.
-- No matter how useful these commands are, there are cases when you do not need to run them, especially on large tables, since they may take quite some time to complete. Simplest case: there were no or very little changes since last time the OPTIMIZE was run.
+- ANALYZE is quite useful a command as well, allowing to update MySQL statistics, that may improve some of SELECT.
+- MariaDB 10.4+ and MySQL 8.0+ also support histograms, that may improve SELECT in cases when a column does not have indexes for some reason.
+- No matter how useful these commands are, there are cases when you do not need to run them, especially on large tables, since they may take quite some time to complete. The simplest case: there were no or very little changes since last time the OPTIMIZE was run.
 
 This library aims to cover all these points in as smart a manner, as was possible at the moment of writing. For details refer Usage section of this readme or comments in the code.
 
@@ -24,7 +24,7 @@ To use the library you need to establish connection with your database through [
 The output will look like this:
 ```php
 array (
-  'bic__bik_swif' => 
+  'bic__bik_swif' =>
   array (
     'TABLE_NAME' => 'bic__bik_swif',
     'ENGINE' => 'InnoDB',
@@ -42,7 +42,7 @@ array (
     'TO_HISTOGRAM' => true,
     'TO_OPTIMIZE' => false,
     'TO_REPAIR' => false,
-    'COMMANDS' => 
+    'COMMANDS' =>
     array (
       0 => 'SET @@SESSION.old_alter_table=false;',
       1 => 'SET @@SESSION.alter_algorithm=\'INPLACE\';',
@@ -63,7 +63,7 @@ After this you have an option to run them manually if you like some control. Alt
 ```php
 (new \Simbiat\optimizeTables)->optimize('schema');
 ```
-This will analyze the tables and then run the suggested commands. The result of the function (by default) will be array of log entries, where array keys are UNIX micro timestamps:
+This will analyze the tables and then run the suggested commands. The result of the function (by default) will be an array of log entries, where array keys are UNIX micro timestamps:
 ```php
 array (
   1586091446410816 => 'Getting list of tables...',
@@ -171,7 +171,7 @@ Class supports disabling [\Simbiat\Cron](https://github.com/Simbiat/Cron) if it'
 (new \Simbiat\optimizeTables('alt__'));
 ```
 
-And this is it - easy to use. But there are also some settings, that will allow you more control on what is done by `optimize()`.
+This is it - easy to use. There are also some settings, that will allow you more control on what is done by `optimize()`.
 
 # Settings
 All settings can be chained together. To check current setting, you can replace `set` with `get` in the function name and remove parameter, which actually sets the value.
@@ -204,7 +204,7 @@ All settings can be chained together. To check current setting, you can replace 
 	<tr>
 		<td><code>setMaintenance</code></td>
 		<td><code>string $table, string $setting_column, string $setting_name, string $value_column</code></td>
-		<td>Library can take quite some time to run and some commands may lock tables (fully or not), so it's adviseable to prevent applicatinos from communicating with them. Usually this is handled by having some kind of system parameter identifying an ongoing maintenance. `$table` stands for table name, `$setting_column` - name of the column where to search for `$setting_name`, that is name of the maintenacne flag. `$value_column` is name of the column, which we will be updating.</td>
+		<td>Library can take quite some time to run and some commands may lock tables (fully or not), so it's advisable to prevent applications from communicating with them. Usually this is handled by having some kind of system parameter identifying an ongoing maintenance. `$table` stands for table name, `$setting_column` - name of the column where to search for `$setting_name`, that is name of the maintenance flag. `$value_column` is name of the column, which we will be updating.</td>
 	</tr>
 	<tr>
 		<td><code>setDays</code></td>
@@ -214,6 +214,6 @@ All settings can be chained together. To check current setting, you can replace 
 	<tr>
 		<td><code>setExclusions</code></td>
 		<td><code>string $action, string $table, $column = NULL</code></td>
-		<td>Exclude table(s) from processing for paritcular `$action`. In case of `histogram` you can also send list of columns to exclude from preparing histograms if we are on MySQL 8.0+. In order to avoid providing excessive columns to histograms' exclusion list, adding only 1 table at a time is allowed.</td>
+		<td>Exclude table(s) from processing for particular `$action`. In case of `histogram` you can also send list of columns to exclude from preparing histograms if we are on MySQL 8.0+. In order to avoid providing excessive columns to histograms' exclusion list, adding only 1 table at a time is allowed.</td>
 	</tr>
 </table>
