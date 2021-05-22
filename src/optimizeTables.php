@@ -82,7 +82,7 @@ class optimizeTables
     /**
      * @throws \Exception
      */
-    public function __construct(string $cronPrefix = 'cron__')
+    public function __construct()
     {
         $this->db_controller = (new Controller);
         #Checking if we are using 'file per table' for INNODB tables
@@ -115,11 +115,7 @@ class optimizeTables
         $this->curTime = time();
         #Checking if CRON is used
         if (method_exists('\Simbiat\Cron','setSetting')) {
-            if (empty($cronPrefix)) {
-                $this->cron = (new Cron('cron__'));
-            } else {
-                $this->cron = (new Cron($cronPrefix));
-            }
+            $this->cron = (new Cron());
             $this->cronEnable = $this->cron::$enabled;
         }
     }
