@@ -19,6 +19,8 @@ class optimizeTables
         'histogram' => false,
         #Flag for COMPRESSED
         'innodb_compress' => false,
+        #Flag indicating, that user has permissions to run SET @@GLOBAL
+        'set_global' => false,
     ];
     #Set of innodb_defragment parameters, that can be overridden
     private array $defragParams = [
@@ -112,6 +114,10 @@ class optimizeTables
                 $this->features_support['histogram'] = true;
             }
         }
+        #Check if SET GLOBAL is possible
+        if ($this->db_controller->count("SELECT COUNT(*) FROM `information_schema`.`USER_PRIVILEGES` WHERE GRANTEE=CONCAT('\'', SUBSTRING_INDEX(CURRENT_USER(), '@', 1), '\'@\'', SUBSTRING_INDEX(CURRENT_USER(), '@', -1), '\'') AND `PRIVILEGE_TYPE` IN ('SUPER', 'SYSTEM_VARIABLES_ADMIN');") > 0) {
+            $this->features_support['set_global'] = true;
+        }
         $this->curTime = time();
         #Checking if CRON is used
         if (method_exists('\Simbiat\Cron','setSetting')) {
@@ -169,7 +175,7 @@ class optimizeTables
                 #If we are not compressing and table has actual rows - add CHECK, REPAIR, ANALYZE and Histograms if they are allowed and supported
                 if ($tables[$name]['TO_OPTIMIZE']) {
                     #Add fulltext_only optimization of table has fulltext indexes
-                    if (!$auto) {
+                    if (!$auto && $this->features_support['set_global']) {
                         if ($table['FULLTEXT']) {
                             $tables[$name]['COMMANDS'][] = 'SET @@GLOBAL.innodb_optimize_fulltext_only=true;';
                         } else {
@@ -384,7 +390,7 @@ class optimizeTables
                     $this->presetting[] = 'SET @@SESSION.alter_algorithm=\'INPLACE\';';
                 }
                 #Enable in-place defragmentation for MariaDB if supported
-                if ($this->features_support['innodb_defragment']) {
+                if ($this->features_support['innodb_defragment'] && $this->features_support['set_global']) {
                     $this->presetting[] = 'SET @@GLOBAL.innodb_defragment=true;';
                     #Setting the defrag parameters if any was overridden
                     foreach ($this->getDefragParam() as $defragParam=>$defragValue) {
@@ -425,7 +431,7 @@ class optimizeTables
                 if ($this->features_support['alter_algorithm']) {
                     $this->postSetting[] = 'SET @@SESSION.alter_algorithm=DEFAULT;';
                 }
-                if ($this->features_support['innodb_defragment']) {
+                if ($this->features_support['innodb_defragment'] && $this->features_support['set_global']) {
                     $this->postSetting[] = 'SET @@GLOBAL.innodb_defragment=DEFAULT;';
                     foreach ($this->getDefragParam() as $defragParam=>$defragValue) {
                         if ($defragValue !== null) {
@@ -433,7 +439,9 @@ class optimizeTables
                         }
                     }
                 }
-                $this->postSetting[] = 'SET @@GLOBAL.innodb_optimize_fulltext_only=DEFAULT;';
+                if ($this->features_support['set_global']) {
+                    $this->postSetting[] = 'SET @@GLOBAL.innodb_optimize_fulltext_only=DEFAULT;';
+                }
             }
         }
     }
@@ -448,7 +456,7 @@ class optimizeTables
                 'analyze', 'optimize' => ['start' => substr(ucfirst($action), 0, -1).'ing', 'success' => $action.'d', 'failure' => $action],
             };
             try {
-                if ($fulltext) {
+                if ($fulltext && $this->features_support['set_global']) {
                     $this->log('Enabling FULLTEXT optimization for `'.$name.'`...');
                     $this->db_controller->query('SET @@GLOBAL.innodb_optimize_fulltext_only=true;');
                 }
