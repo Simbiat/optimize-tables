@@ -50,7 +50,7 @@ class optimizeTables
     ];
     #Minimum fragmentation value to suggest a table for optimization
     private float $threshold = 5;
-    #Table, columns and parameter names to indicate on-going maintenance
+    #Table, columns and parameter names to indicate ongoing maintenance
     private array $maintenanceFlag = [
         'table' => null,
         'setting_column' => null,
@@ -90,7 +90,7 @@ class optimizeTables
         #Checking if we are using 'file per table' for INNODB tables
         $innodb_file_per_table = $this->db_controller->selectColumn('SHOW GLOBAL VARIABLES WHERE `variable_name`=\'innodb_file_per_table\';', [], 1)[0];
         #Checking INNODB format
-        $innodb_file_format = $this->db_controller->selectColumn('SHOW GLOBAL VARIABLES WHERE `variable_name`=\'innodb_file_format\';', [], 1)[0];
+        $innodb_file_format = $this->db_controller->selectColumn('SHOW GLOBAL VARIABLES WHERE `variable_name`=\'innodb_file_format\';', [], 1)[0] ?? '';
         #If we use 'file per table' and 'Barracuda' - it means we can use COMPRESSED as ROW FORMAT
         if (strcasecmp($innodb_file_per_table, 'ON') === 0 && (strcasecmp($innodb_file_format, 'Barracuda') === 0 || $innodb_file_format === '')) {
             $this->features_support['innodb_compress'] = true;
@@ -138,7 +138,7 @@ class optimizeTables
         if ($this->schema === '') {
             $this->schema = $schema;
         }
-        #We need to check that `TEMPORARY` column is available in `TABLES` table, because there are cases, when it's no available on shared hosting
+        #We need to check that `TEMPORARY` column is available in `TABLES` table, because there are cases, when it's not available on shared hosting
         $tempTableCheck = $this->db_controller->selectAll('SELECT `COLUMN_NAME` FROM `information_schema`.`COLUMNS` WHERE `TABLE_SCHEMA` = \'information_schema\' AND `TABLE_NAME` = \'TABLES\' AND `COLUMN_NAME` = \'TEMPORARY\';');
         if (!empty($tempTableCheck) && is_array($tempTableCheck)) {
             $tempTableCheck = true;
@@ -235,7 +235,7 @@ class optimizeTables
             $this->log('Getting list of tables...');
             $tables = $this->jsonData['before'] = $this->analyze($this->schema, true);
             #Skip any actions, if no tables for actions were returned
-            if (array_search(true, array_column($tables, 'TO_COMPRESS')) === false && array_search(true, array_column($tables, 'TO_OPTIMIZE')) === false && array_search(true, array_column($tables, 'TO_CHECK')) === false && array_search(true, array_column($tables, 'TO_REPAIR')) === false && array_search(true, array_column($tables, 'TO_ANALYZE')) === false && array_search(true, array_column($tables, 'TO_HISTOGRAM')) === false) {
+            if (!in_array(true, array_column($tables, 'TO_COMPRESS')) && !in_array(true, array_column($tables, 'TO_OPTIMIZE')) && !in_array(true, array_column($tables, 'TO_CHECK')) && !in_array(true, array_column($tables, 'TO_REPAIR')) && !in_array(true, array_column($tables, 'TO_ANALYZE')) && !in_array(true, array_column($tables, 'TO_HISTOGRAM'))) {
                 $this->log('No tables to process were returned. Skipping...');
                 $this->jsonDump(false);
                 if ($silent === true) {
@@ -826,7 +826,7 @@ class optimizeTables
     public function setJsonPath(string $jsonpath): self
     {
         #If provided path is a directory - append filename
-        if (is_dir($jsonpath) || substr($jsonpath, -1, 1) === '/' || substr($jsonpath, -1, 1) === '\\') {
+        if (is_dir($jsonpath) || str_ends_with($jsonpath, '/') || str_ends_with($jsonpath, '\\')) {
             $jsonpath = preg_replace('/(.*[^\\\\\/]+)([\\\\\/]+$)/mi', '$1', $jsonpath).'/tables.json';
         }
         $this->jsonpath = $jsonpath;
