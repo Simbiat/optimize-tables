@@ -106,6 +106,9 @@ class optimizeTables
                     $this->features_support['alter_algorithm'] = true;
                     if (version_compare(strtolower($version), '10.4-mariadb', 'ge')) {
                         $this->features_support['analyze_persistent'] = true;
+                        if (version_compare(strtolower($version), '10.6-mariadb', 'ge')) {
+                            $this->features_support['innodb_compress'] = false;
+                        }
                     }
                 }
             }
@@ -167,16 +170,22 @@ class optimizeTables
                 $tables[$name]['TO_OPTIMIZE'] = $this->checkAdd('optimize', $table);
                 $tables[$name]['TO_REPAIR'] = $this->checkAdd('repair', $table);
             }
-            #If table is InnoDB and compression is possible and allowed - suggest compression only, since OPTIMIZE will be redundant after this
+            #If table is InnoDB and compression is possible and allowed - suggest compression only, since OPTIMIZE will be redundant after this. This also will not work
             if ($tables[$name]['TO_COMPRESS']) {
-                /** @noinspection SqlResolve */
-                $tables[$name]['COMPRESS'] = $tables[$name]['COMMANDS'][] = 'ALTER TABLE `'.$this->schema.'`.`'.$table['TABLE_NAME'].'` ROW_FORMAT=COMPRESSED;';
+                if ($this->features_support['alter_algorithm'] && intval($tables[$name]['FULLTEXT']) > 1) {
+                    #InnoDB does not support table INPLACE rebuild when there are multiple FULLTEXT indexes, thus we have to use COPY algorithm
+                    /** @noinspection SqlResolve */
+                    $tables[$name]['COMPRESS'] = $tables[$name]['COMMANDS'][] = 'ALTER TABLE `'.$this->schema.'`.`'.$table['TABLE_NAME'].'` ROW_FORMAT=COMPRESSED ALGORITHM=COPY;';
+                } else {
+                    /** @noinspection SqlResolve */
+                    $tables[$name]['COMPRESS'] = $tables[$name]['COMMANDS'][] = 'ALTER TABLE `' . $this->schema . '`.`' . $table['TABLE_NAME'] . '` ROW_FORMAT=COMPRESSED;';
+                }
             } else {
                 #If we are not compressing and table has actual rows - add CHECK, REPAIR, ANALYZE and Histograms if they are allowed and supported
                 if ($tables[$name]['TO_OPTIMIZE']) {
                     #Add fulltext_only optimization of table has fulltext indexes
                     if (!$auto && $this->features_support['set_global']) {
-                        if ($table['FULLTEXT']) {
+                        if (intval($table['FULLTEXT']) > 0) {
                             $tables[$name]['COMMANDS'][] = 'SET @@GLOBAL.innodb_optimize_fulltext_only=true;';
                         } else {
                             $tables[$name]['COMMANDS'][] = 'SET @@GLOBAL.innodb_optimize_fulltext_only=false;';
