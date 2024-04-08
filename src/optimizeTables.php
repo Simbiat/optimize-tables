@@ -98,24 +98,22 @@ class optimizeTables
             $this->features_support['innodb_compress'] = false;
         }
         #Checking if MariaDB is used and if it's new enough to support INNODB Defragmentation
-        $version = $this->db_controller->selectColumn('SELECT VERSION();', [])[0];
-        if (preg_match('/.*MariaDB.*/mi', $version)) {
-            if (version_compare(strtolower($version), '10.1.1-mariadb', 'ge')) {
+        $version = $this->db_controller->selectColumn('SELECT VERSION();')[0];
+        if (false !== mb_stripos($version, 'MariaDB', encoding: 'UTF-8')) {
+            if (version_compare(mb_strtolower($version, 'UTF-8'), '10.1.1-mariadb', 'ge')) {
                 $this->features_support['innodb_defragment'] = true;
-                if (version_compare(strtolower($version), '10.3.7-mariadb', 'ge')) {
+                if (version_compare(mb_strtolower($version, 'UTF-8'), '10.3.7-mariadb', 'ge')) {
                     $this->features_support['alter_algorithm'] = true;
-                    if (version_compare(strtolower($version), '10.4-mariadb', 'ge')) {
+                    if (version_compare(mb_strtolower($version, 'UTF-8'), '10.4-mariadb', 'ge')) {
                         $this->features_support['analyze_persistent'] = true;
-                        if (version_compare(strtolower($version), '10.6-mariadb', 'ge')) {
+                        if (version_compare(mb_strtolower($version, 'UTF-8'), '10.6-mariadb', 'ge')) {
                             $this->features_support['innodb_compress'] = false;
                         }
                     }
                 }
             }
-        } else {
-            if (version_compare(strtolower($version), '8', 'ge')) {
-                $this->features_support['histogram'] = true;
-            }
+        } elseif (version_compare(mb_strtolower($version, 'UTF-8'), '8', 'ge')) {
+            $this->features_support['histogram'] = true;
         }
         #Check if SET GLOBAL is possible
         if ($this->db_controller->count("SELECT COUNT(*) FROM `information_schema`.`USER_PRIVILEGES` WHERE GRANTEE=CONCAT('\'', SUBSTRING_INDEX(CURRENT_USER(), '@', 1), '\'@\'', SUBSTRING_INDEX(CURRENT_USER(), '@', -1), '\'') AND `PRIVILEGE_TYPE` IN ('SUPER', 'SYSTEM_VARIABLES_ADMIN');") > 0) {
@@ -123,7 +121,7 @@ class optimizeTables
         }
         $this->curTime = time();
         #Checking if CRON is used
-        if (method_exists('\Simbiat\Cron','setSetting')) {
+        if (method_exists(Cron::class,'setSetting')) {
             $this->cron = (new Cron());
             $this->cronEnable = $this->cron::$enabled;
         }
@@ -143,7 +141,7 @@ class optimizeTables
         }
         #We need to check that `TEMPORARY` column is available in `TABLES` table, because there are cases, when it's not available on shared hosting
         $tempTableCheck = $this->db_controller->selectAll('SELECT `COLUMN_NAME` FROM `information_schema`.`COLUMNS` WHERE `TABLE_SCHEMA` = \'information_schema\' AND `TABLE_NAME` = \'TABLES\' AND `COLUMN_NAME` = \'TEMPORARY\';');
-        if (!empty($tempTableCheck) && is_array($tempTableCheck)) {
+        if (!empty($tempTableCheck)) {
             $tempTableCheck = true;
         } else {
             $tempTableCheck = false;
@@ -172,12 +170,10 @@ class optimizeTables
             }
             #If table is InnoDB and compression is possible and allowed - suggest compression only, since OPTIMIZE will be redundant after this. This also will not work
             if ($tables[$name]['TO_COMPRESS']) {
-                if ($this->features_support['alter_algorithm'] && intval($tables[$name]['FULLTEXT']) > 1) {
+                if ($this->features_support['alter_algorithm'] && (int)$tables[ $name ]['FULLTEXT'] > 1) {
                     #InnoDB does not support table INPLACE rebuild when there are multiple FULLTEXT indexes, thus we have to use COPY algorithm
-                    /** @noinspection SqlResolve */
                     $tables[$name]['COMPRESS'] = $tables[$name]['COMMANDS'][] = 'ALTER TABLE `'.$this->schema.'`.`'.$table['TABLE_NAME'].'` ROW_FORMAT=COMPRESSED ALGORITHM=COPY;';
                 } else {
-                    /** @noinspection SqlResolve */
                     $tables[$name]['COMPRESS'] = $tables[$name]['COMMANDS'][] = 'ALTER TABLE `' . $this->schema . '`.`' . $table['TABLE_NAME'] . '` ROW_FORMAT=COMPRESSED;';
                 }
             } else {
@@ -185,7 +181,7 @@ class optimizeTables
                 if ($tables[$name]['TO_OPTIMIZE']) {
                     #Add fulltext_only optimization of table has fulltext indexes
                     if (!$auto && $this->features_support['set_global']) {
-                        if (intval($table['FULLTEXT']) > 0) {
+                        if ((int)$table['FULLTEXT'] > 0) {
                             $tables[$name]['COMMANDS'][] = 'SET @@GLOBAL.innodb_optimize_fulltext_only=true;';
                         } else {
                             $tables[$name]['COMMANDS'][] = 'SET @@GLOBAL.innodb_optimize_fulltext_only=false;';
@@ -204,7 +200,7 @@ class optimizeTables
                 }
                 if ($tables[$name]['TO_HISTOGRAM']) {
                     if ($this->features_support['histogram']) {
-                        $columns = $this->db_controller->selectColumn('SELECT `COLUMN_NAME` FROM `information_schema`.`COLUMNS` WHERE `TABLE_SCHEMA`=\''.$this->schema.'\' AND `TABLE_NAME`=\''.$table['TABLE_NAME'].'\' AND `GENERATION_EXPRESSION` IS NULL AND `COLUMN_KEY` IN (\'\', \'MUL\') AND `DATA_TYPE` NOT IN (\'JSON\', \'GEOMETRY\', \'POINT\', \'LINESTRING\', \'POLYGON\', \'MULTIPOINT\', \'MULTILINESTRING\', \'MULTIPOLYGON\', \'GEOMETRYCOLLECTION\')'.(isset($this->getExclusions('histogram')[$name]) ? ($this->getExclusions('histogram')[$name] === [] ? '' : ' AND `COLUMN_NAME` NOT IN(\''.implode($this->getExclusions('histogram')[$name], '\' \'').'\')') : ''));
+                        $columns = $this->db_controller->selectColumn('SELECT `COLUMN_NAME` FROM `information_schema`.`COLUMNS` WHERE `TABLE_SCHEMA`=\''.$this->schema.'\' AND `TABLE_NAME`=\''.$table['TABLE_NAME'].'\' AND `GENERATION_EXPRESSION` IS NULL AND `COLUMN_KEY` IN (\'\', \'MUL\') AND `DATA_TYPE` NOT IN (\'JSON\', \'GEOMETRY\', \'POINT\', \'LINESTRING\', \'POLYGON\', \'MULTIPOINT\', \'MULTILINESTRING\', \'MULTIPOLYGON\', \'GEOMETRYCOLLECTION\')'.(empty($this->getExclusions('histogram')[$name]) ? '' : ' AND `COLUMN_NAME` NOT IN(\''.implode('\' \'', $this->getExclusions('histogram')[$name]).'\')'));
                         if ($columns) {
                             $tables[$name]['HISTOGRAM'] = $tables[$name]['COMMANDS'][] = 'ANALYZE TABLE `'.$this->schema.'`.`'.$table['TABLE_NAME'].'` UPDATE HISTOGRAM ON `'.implode('`, `', $columns).'`';
                         } else {
@@ -223,7 +219,8 @@ class optimizeTables
                 unset($tables[$name]['ANALYZE'], $tables[$name]['CHECK'], $tables[$name]['COMPRESS'], $tables[$name]['HISTOGRAM'], $tables[$name]['OPTIMIZE'], $tables[$name]['REPAIR']);
                 if (!empty($tables[$name]['COMMANDS'])) {
                     #If there are any commands, add suggested settings and their reversal as well
-                    $tables[$name]['COMMANDS'] = array_merge($this->presetting, $tables[$name]['COMMANDS'], $this->postSetting);
+                    $commandsToMerge = [$this->presetting, $tables[$name]['COMMANDS'], $this->postSetting];
+                    $tables[$name]['COMMANDS'] = array_merge(...$commandsToMerge);
                 }
             }
         }
@@ -244,17 +241,17 @@ class optimizeTables
             $this->log('Getting list of tables...');
             $tables = $this->jsonData['before'] = $this->analyze($this->schema, true);
             #Skip any actions, if no tables for actions were returned
-            if (!in_array(true, array_column($tables, 'TO_COMPRESS')) && !in_array(true, array_column($tables, 'TO_OPTIMIZE')) && !in_array(true, array_column($tables, 'TO_CHECK')) && !in_array(true, array_column($tables, 'TO_REPAIR')) && !in_array(true, array_column($tables, 'TO_ANALYZE')) && !in_array(true, array_column($tables, 'TO_HISTOGRAM'))) {
+            if (!in_array(true, array_column($tables, 'TO_COMPRESS'), true) && !in_array(true, array_column($tables, 'TO_OPTIMIZE'), true) && !in_array(true, array_column($tables, 'TO_CHECK'), true) && !in_array(true, array_column($tables, 'TO_REPAIR'), true) && !in_array(true, array_column($tables, 'TO_ANALYZE'), true) && !in_array(true, array_column($tables, 'TO_HISTOGRAM'), true)) {
                 $this->log('No tables to process were returned. Skipping...');
                 $this->jsonDump(false);
                 if ($silent === true) {
                     return true;
-                } else {
-                    return $this->jsonData['logs'];
                 }
+                return $this->jsonData['logs'];
             }
             #Sorting by size of tables, to deal with smaller ones first
-            array_multisort(array_column($tables, 'TOTAL_LENGTH'), SORT_ASC, $tables);
+            $column = array_column($tables, 'TOTAL_LENGTH');
+            array_multisort($column, SORT_ASC, $tables);
             #Attempting to prevent timeouts
             set_time_limit(0);
             #Applying optimization settings
@@ -272,7 +269,7 @@ class optimizeTables
                 $this->log('Updating tables list after compression...');
                 $tables = $this->analyze($this->schema, true);
             }
-            #Checking for tables, that have fulltext indexes. We need to first optimize them using fulltext_only, because there is a chance, they will not require further optimization afterwards
+            #Checking for tables, that have fulltext indexes. We need to first optimize them using fulltext_only, because there is a chance, they will not require further optimization afterward
             $refresh = false;
             #Checking if refreshed list is not empty
             if (!empty($tables)) {
@@ -288,7 +285,7 @@ class optimizeTables
                 $tables = $this->analyze($this->schema, true);
             }
             #Doing the rest of optimization if any
-            #Checking if refreshed list is not empty
+            #Checking, if refreshed list is not empty
             if (!empty($tables)) {
                 foreach ($tables as $name=>$data) {
                     if ($data['TO_OPTIMIZE']) {
@@ -313,13 +310,11 @@ class optimizeTables
             $this->jsonDump();
             if ($silent === true) {
                 return true;
-            } else {
-                if ($showStats) {
-                    return $this->showStats();
-                } else {
-                    return $this->jsonData['logs'];
-                }
             }
+            if ($showStats) {
+                return $this->showStats();
+            }
+            return $this->jsonData['logs'];
         } catch(\Exception $e) {
             return $e->getMessage()."\r\n".$e->getTraceAsString();
         }
@@ -389,23 +384,21 @@ class optimizeTables
                     }
                 }
             }
-        } else {
             #Populate the commands for pre-optimization
-            if ($this->presetting === []) {
-                #Disabling old_alter_table to ensure INPLACE support if server supports it.
-                $this->presetting[] = 'SET @@SESSION.old_alter_table=false;';
-                #Enforce alter_algorithm='INPLACE' if supported
-                if ($this->features_support['alter_algorithm']) {
-                    $this->presetting[] = 'SET @@SESSION.alter_algorithm=\'INPLACE\';';
-                }
-                #Enable in-place defragmentation for MariaDB if supported
-                if ($this->features_support['innodb_defragment'] && $this->features_support['set_global']) {
-                    $this->presetting[] = 'SET @@GLOBAL.innodb_defragment=true;';
-                    #Setting the defrag parameters if any was overridden
-                    foreach ($this->getDefragParam() as $defragParam=>$defragValue) {
-                        if ($defragValue !== null) {
-                            $this->presetting[] = 'SET @@GLOBAL.innodb_defragment_'.$defragParam.'='.$defragValue.';';
-                        }
+        } elseif ($this->presetting === []) {
+            #Disabling old_alter_table to ensure INPLACE support if server supports it.
+            $this->presetting[] = 'SET @@SESSION.old_alter_table=false;';
+            #Enforce alter_algorithm='INPLACE' if supported
+            if ($this->features_support['alter_algorithm']) {
+                $this->presetting[] = 'SET @@SESSION.alter_algorithm=\'INPLACE\';';
+            }
+            #Enable in-place defragmentation for MariaDB if supported
+            if ($this->features_support['innodb_defragment'] && $this->features_support['set_global']) {
+                $this->presetting[] = 'SET @@GLOBAL.innodb_defragment=true;';
+                #Setting the defrag parameters if any was overridden
+                foreach ($this->getDefragParam() as $defragParam=>$defragValue) {
+                    if ($defragValue !== null) {
+                        $this->presetting[] = 'SET @@GLOBAL.innodb_defragment_'.$defragParam.'='.$defragValue.';';
                     }
                 }
             }
@@ -433,36 +426,34 @@ class optimizeTables
             }
             #Maintenance mode OFF
             $this->runMaintenance($this->schema, false);
-        } else {
+        } elseif ($this->postSetting === []) {
             #Populate the commands for post-optimization
-            if ($this->postSetting === []) {
-                $this->postSetting[] = 'SET @@SESSION.old_alter_table=DEFAULT;';
-                if ($this->features_support['alter_algorithm']) {
-                    $this->postSetting[] = 'SET @@SESSION.alter_algorithm=DEFAULT;';
-                }
-                if ($this->features_support['innodb_defragment'] && $this->features_support['set_global']) {
-                    $this->postSetting[] = 'SET @@GLOBAL.innodb_defragment=DEFAULT;';
-                    foreach ($this->getDefragParam() as $defragParam=>$defragValue) {
-                        if ($defragValue !== null) {
-                            $this->postSetting[] = 'SET @@GLOBAL.innodb_defragment_'.$defragParam.'=DEFAULT;';
-                        }
+            $this->postSetting[] = 'SET @@SESSION.old_alter_table=DEFAULT;';
+            if ($this->features_support['alter_algorithm']) {
+                $this->postSetting[] = 'SET @@SESSION.alter_algorithm=DEFAULT;';
+            }
+            if ($this->features_support['innodb_defragment'] && $this->features_support['set_global']) {
+                $this->postSetting[] = 'SET @@GLOBAL.innodb_defragment=DEFAULT;';
+                foreach ($this->getDefragParam() as $defragParam=>$defragValue) {
+                    if ($defragValue !== null) {
+                        $this->postSetting[] = 'SET @@GLOBAL.innodb_defragment_'.$defragParam.'=DEFAULT;';
                     }
                 }
-                if ($this->features_support['set_global']) {
-                    $this->postSetting[] = 'SET @@GLOBAL.innodb_optimize_fulltext_only=DEFAULT;';
-                }
+            }
+            if ($this->features_support['set_global']) {
+                $this->postSetting[] = 'SET @@GLOBAL.innodb_optimize_fulltext_only=DEFAULT;';
             }
         }
     }
 
     private function toRun(string $action, string $name, string $command, bool $fulltext = false): bool
     {
-        $action = strtolower($action);
+        $action = mb_strtolower($action, 'UTF-8');
         if ($this->checkAction($action)) {
             $verbs = match($action) {
                 'compress', 'check', 'repair' => ['start' => ucfirst($action).'ing', 'success' => $action.'ed', 'failure' => $action],
                 'histogram' => ['start' => 'Creating histograms for','success' => 'created histograms for', 'failure' => 'create histograms for'],
-                'analyze', 'optimize' => ['start' => substr(ucfirst($action), 0, -1).'ing', 'success' => $action.'d', 'failure' => $action],
+                'analyze', 'optimize' => ['start' => ucfirst(mb_substr($action, 0, -1, 'UTF-8').'ing'), 'success' => $action.'d', 'failure' => $action],
             };
             try {
                 if ($fulltext && $this->features_support['set_global']) {
@@ -473,9 +464,9 @@ class optimizeTables
                 #Get time when action started
                 $start = array_key_last($this->jsonData['logs']);
                 $this->db_controller->query($command);
-                $this->jsonData['before'][$name][strtoupper($action).'_DATE'] = $this->curTime;
+                $this->jsonData['before'][$name][mb_strtoupper($action, 'UTF-8').'_DATE'] = $this->curTime;
                 $this->log('Successfully '.$verbs['success'].' `'.$name.'`.');
-                $this->jsonData['before'][$name][strtoupper($action).'_TIME'] = array_key_last($this->jsonData['logs']) - $start;
+                $this->jsonData['before'][$name][mb_strtoupper($action, 'UTF-8').'_TIME'] = array_key_last($this->jsonData['logs']) - $start;
                 return true;
             } catch (\Exception $e) {
                 #We do not want to cancel everything in case of an issue with just one table
@@ -541,10 +532,8 @@ class optimizeTables
             }
             #Reset previous post-optimization data (if any)
             $json['after'] = [];
-        } else {
-            if (isset($this->jsonData['logs'])) {
-                $json['logs'] = $this->jsonData['logs'];
-            }
+        } elseif (isset($this->jsonData['logs'])) {
+            $json['logs'] = $this->jsonData['logs'];
         }
         $this->jsonData = $json;
     }
@@ -590,45 +579,33 @@ class optimizeTables
             foreach ($this->jsonData['before'] as $name=> $data) {
                 if (isset($data['COMPRESS_DATE'])) {
                     $this->jsonData['after'][$name]['COMPRESS_DATE'] = $data['COMPRESS_DATE'];
-                } else {
-                    if (isset($this->jsonData['previous'][$name]['COMPRESS_DATE'])) {
-                        $this->jsonData['after'][$name]['COMPRESS_DATE'] = $this->jsonData['previous'][$name]['COMPRESS_DATE'];
-                    }
+                } elseif (isset($this->jsonData['previous'][$name]['COMPRESS_DATE'])) {
+                    $this->jsonData['after'][$name]['COMPRESS_DATE'] = $this->jsonData['previous'][$name]['COMPRESS_DATE'];
                 }
                 if (isset($data['OPTIMIZE_DATE'])) {
                     $this->jsonData['after'][$name]['OPTIMIZE_DATE'] = $data['OPTIMIZE_DATE'];
-                } else {
-                    if (isset($this->jsonData['previous'][$name]['OPTIMIZE_DATE'])) {
-                        $this->jsonData['after'][$name]['OPTIMIZE_DATE'] = $this->jsonData['previous'][$name]['OPTIMIZE_DATE'];
-                    }
+                } elseif (isset($this->jsonData['previous'][$name]['OPTIMIZE_DATE'])) {
+                    $this->jsonData['after'][$name]['OPTIMIZE_DATE'] = $this->jsonData['previous'][$name]['OPTIMIZE_DATE'];
                 }
                 if (isset($data['CHECK_DATE'])) {
                     $this->jsonData['after'][$name]['CHECK_DATE'] = $data['CHECK_DATE'];
-                } else {
-                    if (isset($this->jsonData['previous'][$name]['CHECK_DATE'])) {
-                        $this->jsonData['after'][$name]['CHECK_DATE'] = $this->jsonData['previous'][$name]['CHECK_DATE'];
-                    }
+                } elseif (isset($this->jsonData['previous'][$name]['CHECK_DATE'])) {
+                    $this->jsonData['after'][$name]['CHECK_DATE'] = $this->jsonData['previous'][$name]['CHECK_DATE'];
                 }
                 if (isset($data['REPAIR_DATE'])) {
                     $this->jsonData['after'][$name]['REPAIR_DATE'] = $data['REPAIR_DATE'];
-                } else {
-                    if (isset($this->jsonData['previous'][$name]['REPAIR_DATE'])) {
-                        $this->jsonData['after'][$name]['REPAIR_DATE'] = $this->jsonData['previous'][$name]['REPAIR_DATE'];
-                    }
+                } elseif (isset($this->jsonData['previous'][$name]['REPAIR_DATE'])) {
+                    $this->jsonData['after'][$name]['REPAIR_DATE'] = $this->jsonData['previous'][$name]['REPAIR_DATE'];
                 }
                 if (isset($data['ANALYZE_DATE'])) {
                     $this->jsonData['after'][$name]['ANALYZE_DATE'] = $data['ANALYZE_DATE'];
-                } else {
-                    if (isset($this->jsonData['previous'][$name]['ANALYZE_DATE'])) {
-                        $this->jsonData['after'][$name]['ANALYZE_DATE'] = $this->jsonData['previous'][$name]['ANALYZE_DATE'];
-                    }
+                } elseif (isset($this->jsonData['previous'][$name]['ANALYZE_DATE'])) {
+                    $this->jsonData['after'][$name]['ANALYZE_DATE'] = $this->jsonData['previous'][$name]['ANALYZE_DATE'];
                 }
                 if (isset($data['HISTOGRAM_DATE'])) {
                     $this->jsonData['after'][$name]['HISTOGRAM_DATE'] = $data['HISTOGRAM_DATE'];
-                } else {
-                    if (isset($this->jsonData['previous'][$name]['HISTOGRAM_DATE'])) {
-                        $this->jsonData['after'][$name]['HISTOGRAM_DATE'] = $this->jsonData['previous'][$name]['HISTOGRAM_DATE'];
-                    }
+                } elseif (isset($this->jsonData['previous'][$name]['HISTOGRAM_DATE'])) {
+                    $this->jsonData['after'][$name]['HISTOGRAM_DATE'] = $this->jsonData['previous'][$name]['HISTOGRAM_DATE'];
                 }
                 unset($this->jsonData['before'][$name]['ANALYZE'], $this->jsonData['before'][$name]['CHECK'], $this->jsonData['before'][$name]['COMPRESS'], $this->jsonData['before'][$name]['HISTOGRAM'], $this->jsonData['before'][$name]['OPTIMIZE'], $this->jsonData['before'][$name]['REPAIR'], $this->jsonData['after'][$name]['ANALYZE'], $this->jsonData['after'][$name]['CHECK'], $this->jsonData['after'][$name]['COMPRESS'], $this->jsonData['after'][$name]['HISTOGRAM'], $this->jsonData['after'][$name]['OPTIMIZE'], $this->jsonData['after'][$name]['REPAIR']);
             }
@@ -656,11 +633,10 @@ class optimizeTables
     #Check if proper action type is used
     private function checkAction(string $action): bool
     {
-        if (in_array(strtolower($action), ['analyze', 'check', 'compress', 'histogram', 'optimize', 'repair'])) {
+        if (in_array(mb_strtolower($action, 'UTF-8'), ['analyze', 'check', 'compress', 'histogram', 'optimize', 'repair'])) {
             return true;
-        } else {
-            throw new \UnexpectedValueException('Wrong action type provided ('.$action.'). Only ANALYZE, CHECK, COMPRESS, HISTOGRAM, OPTIMIZE and REPAIR are supported.');
         }
+        throw new \UnexpectedValueException('Wrong action type provided ('.$action.'). Only ANALYZE, CHECK, COMPRESS, HISTOGRAM, OPTIMIZE and REPAIR are supported.');
     }
 
     #Check if enough time has passed since last $action was applied to the table
@@ -673,13 +649,8 @@ class optimizeTables
         if ($days === 0) {
             #If 0 was set means, we do not care for time at all
             return true;
-        } else {
-            if (($this->curTime - $prevTime) >= $days*86400) {
-                return true;
-            } else {
-                return false;
-            }
         }
+        return ($this->curTime - $prevTime) >= $days * 86400;
     }
 
     #Check if there were any changes since previous optimization
@@ -687,33 +658,29 @@ class optimizeTables
     {
         if (!isset($this->jsonData['previous'][$table['TABLE_NAME']])) {
             #If we initially have 0 rows, it does not make sense to anything with the table
-            if (intval($table['TABLE_ROWS']) === 0) {
+            if ((int)$table['TABLE_ROWS'] === 0) {
                 if ($zeroMatter) {
                     return true;
                 }
             } else {
                 return true;
             }
+        } elseif ($this->jsonData['previous'][$table['TABLE_NAME']]['TABLE_ROWS'] !== $table['TABLE_ROWS']) {
+            if ((int)$table['TABLE_ROWS'] > 0) {
+                return true;
+            }
+            #For CHECK and REPAIR it does not make sense to run them if there are no rows now (on consecutive run), while for others OPTIMIZE and ANALYZE it may make a difference
+            if ($zeroMatter) {
+                return true;
+            }
         } else {
-            if ($this->jsonData['previous'][$table['TABLE_NAME']]['TABLE_ROWS'] !== $table['TABLE_ROWS']) {
-                if (intval($table['TABLE_ROWS']) > 0) {
-                    return true;
-                } else {
-                    #For CHECK and REPAIR it does not make sense to run them if there are no rows now (on consecutive run), while for others OPTIMIZE and ANALYZE it may make a difference
-                    if ($zeroMatter) {
-                        return true;
-                    }
-                }
-            } else {
-                #If number of rows is equal it does not mean there were no changes: some values my have been updated or equal number of rows was deleted and inserted, so we compare actual lengths of data, index and free space (should not compare TOTAL_LENGTH, since sum may be equal)
-                if ($this->jsonData['previous'][$table['TABLE_NAME']]['DATA_LENGTH'] !== $table['DATA_LENGTH'] || $this->jsonData['previous'][$table['TABLE_NAME']]['INDEX_LENGTH'] !== $table['INDEX_LENGTH'] || $this->jsonData['previous'][$table['TABLE_NAME']]['TOTAL_LENGTH'] !== $table['TOTAL_LENGTH']) {
-                    return true;
-                } else {
-                    #If all 3 are equal it does not mean there were no changes, but it's unlikely CHECK or REPAIR will bring any benefits, but OPTIMIZATION and ANALYZE still may, if actual data has changed, indeed
-                    if ($zeroMatter) {
-                        return true;
-                    }
-                }
+            #If number of rows is equal it does not mean there were no changes: some values my have been updated or equal number of rows was deleted and inserted, so we compare actual lengths of data, index and free space (should not compare TOTAL_LENGTH, since sum may be equal)
+            if ($this->jsonData['previous'][$table['TABLE_NAME']]['DATA_LENGTH'] !== $table['DATA_LENGTH'] || $this->jsonData['previous'][$table['TABLE_NAME']]['INDEX_LENGTH'] !== $table['INDEX_LENGTH'] || $this->jsonData['previous'][$table['TABLE_NAME']]['TOTAL_LENGTH'] !== $table['TOTAL_LENGTH']) {
+                return true;
+            }
+            #If all 3 are equal it does not mean there were no changes, but it's unlikely CHECK or REPAIR will bring any benefits, but OPTIMIZATION and ANALYZE still may, if actual data has changed, indeed
+            if ($zeroMatter) {
+                return true;
             }
         }
         return false;
@@ -722,44 +689,42 @@ class optimizeTables
     #Function to check whether specific command needs to be added to the table. Separating this from analyze() for a bit cleaner looking code
     private function checkAdd(string $action, array $table): bool
     {
-        $action = strtolower($action);
-        if ($this->checkAction($action)) {
-            #Check if table is in exclusion list for the action
-            if (!in_array($table['TABLE_NAME'], ($action === 'histogram' ? array_keys($this->getExclusions($action)) : $this->getExclusions($action)))) {
-                switch ($action) {
-                    case 'compress':
-                        if (strcasecmp($table['ENGINE'], 'InnoDB') === 0 && strcasecmp($table['ROW_FORMAT'], 'Compressed') !== 0 && $this->suggest['compress'] && $this->features_support['innodb_compress']) {
+        $action = mb_strtolower($action, 'UTF-8');
+        #Check if table is in exclusion list for the action
+        if ($this->checkAction($action) && !in_array($table['TABLE_NAME'], ($action === 'histogram' ? array_keys($this->getExclusions($action)) : $this->getExclusions($action)), true)) {
+            switch ($action) {
+                case 'compress':
+                    if ($this->suggest['compress'] && $this->features_support['innodb_compress'] && strcasecmp($table['ENGINE'], 'InnoDB') === 0 && strcasecmp($table['ROW_FORMAT'], 'Compressed') !== 0) {
+                        return true;
+                    }
+                    break;
+                case 'analyze':
+                    if ($this->suggest['analyze'] && $this->checkAge('ANALYZE', ($this->jsonData['previous'][$table['TABLE_NAME']]['ANALYZE_DATE'] ?? 0)) && $this->checkChange($table, true)) {
+                        return true;
+                    }
+                    break;
+                case 'check':
+                    if ($this->suggest['check'] && $this->checkAge('CHECK', ($this->jsonData['previous'][$table['TABLE_NAME']]['CHECK_DATE'] ?? 0)) && $this->checkChange($table)) {
+                        return true;
+                    }
+                    break;
+                case 'histogram':
+                    if ($this->suggest['histogram'] && $this->checkAge('HISTOGRAM', ($this->jsonData['previous'][$table['TABLE_NAME']]['HISTOGRAM_DATE'] ?? 0)) && $this->checkChange($table, true)) {
+                        if ($this->features_support['histogram'] || $this->features_support['analyze_persistent']) {
                             return true;
                         }
-                        break;
-                    case 'analyze':
-                        if ($this->suggest['analyze'] && $this->checkAge('ANALYZE', ($this->jsonData['previous'][$table['TABLE_NAME']]['ANALYZE_DATE'] ?? 0)) && $this->checkChange($table, true)) {
-                            return true;
-                        }
-                        break;
-                    case 'check':
-                        if ($this->suggest['check'] && $this->checkAge('CHECK', ($this->jsonData['previous'][$table['TABLE_NAME']]['CHECK_DATE'] ?? 0)) && $this->checkChange($table)) {
-                            return true;
-                        }
-                        break;
-                    case 'histogram':
-                        if ($this->suggest['histogram'] && $this->checkAge('HISTOGRAM', ($this->jsonData['previous'][$table['TABLE_NAME']]['HISTOGRAM_DATE'] ?? 0)) && $this->checkChange($table, true)) {
-                            if ($this->features_support['histogram'] || $this->features_support['analyze_persistent']) {
-                                return true;
-                            }
-                        }
-                        break;
-                    case 'optimize':
-                        if ($this->suggest['optimize'] && $this->checkAge('OPTIMIZE', ($this->jsonData['previous'][$table['TABLE_NAME']]['OPTIMIZE_DATE'] ?? 0)) && $this->checkChange($table, true) && floatval($table['FRAGMENTATION']) >= $this->getThreshold() && in_array(strtolower($table['ENGINE']), ['innodb', 'aria', 'myisam', 'archive'])) {
-                            return true;
-                        }
-                        break;
-                    case 'repair':
-                        if ($this->suggest['repair'] && in_array(strtolower($table['ENGINE']), ['csv', 'aria', 'myisam', 'archive']) && $this->checkAge('REPAIR', ($this->jsonData['previous'][$table['TABLE_NAME']]['REPAIR_DATE'] ?? 0)) && $this->checkChange($table)) {
-                            return true;
-                        }
-                        break;
-                }
+                    }
+                    break;
+                case 'optimize':
+                    if ($this->suggest['optimize'] && $this->checkAge('OPTIMIZE', ($this->jsonData['previous'][$table['TABLE_NAME']]['OPTIMIZE_DATE'] ?? 0)) && $this->checkChange($table, true) && (float)$table['FRAGMENTATION'] >= $this->getThreshold() && in_array(mb_strtolower($table['ENGINE'], 'UTF-8'), ['innodb', 'aria', 'myisam', 'archive'])) {
+                        return true;
+                    }
+                    break;
+                case 'repair':
+                    if ($this->suggest['repair'] && $this->checkAge('REPAIR', ($this->jsonData['previous'][$table['TABLE_NAME']]['REPAIR_DATE'] ?? 0)) && $this->checkChange($table) && in_array(mb_strtolower($table['ENGINE'], 'UTF-8'), ['csv', 'aria', 'myisam', 'archive'])) {
+                        return true;
+                    }
+                    break;
             }
         }
         return false;
@@ -794,11 +759,11 @@ class optimizeTables
     {
         #Negative values do not make sense in this case, so reverting them to 0 for consistency
         if ($threshold < 0) {
-            $threshold = 0;
+            $threshold = 0.0;
         }
         #Values close to or over 100 do not make sense either, so reverting them to default 5
         if ($threshold > 99) {
-            $threshold = 5;
+            $threshold = 5.0;
         }
         $this->threshold = $threshold;
         return $this;
@@ -807,17 +772,16 @@ class optimizeTables
     public function getSuggest(string $action): bool
     {
         if ($this->checkAction($action)) {
-            $action = strtolower($action);
+            $action = mb_strtolower($action, 'UTF-8');
             return $this->suggest[$action];
-        } else {
-            return false;
         }
+        return false;
     }
 
     public function setSuggest(string $action, bool $flag): self
     {
         if ($this->checkAction($action)) {
-            $action = strtolower($action);
+            $action = mb_strtolower($action, 'UTF-8');
             $this->suggest[$action] = $flag;
         }
         return $this;
@@ -827,16 +791,15 @@ class optimizeTables
     {
         if ($this->jsonpath === '') {
             return dirname(__DIR__).'/tables.json';
-        } else {
-            return $this->jsonpath;
         }
+        return $this->jsonpath;
     }
 
     public function setJsonPath(string $jsonpath): self
     {
         #If provided path is a directory - append filename
         if (is_dir($jsonpath) || str_ends_with($jsonpath, '/') || str_ends_with($jsonpath, '\\')) {
-            $jsonpath = preg_replace('/(.*[^\\\\\/]+)([\\\\\/]+$)/mi', '$1', $jsonpath).'/tables.json';
+            $jsonpath = preg_replace('/(.*[^\\\\\/]+)([\\\\\/]+$)/m', '$1', $jsonpath).'/tables.json';
         }
         $this->jsonpath = $jsonpath;
         return $this;
@@ -851,7 +814,7 @@ class optimizeTables
     {
         if ($this->features_support['innodb_defragment']) {
             #Convert to lower case for consistency
-            $param = strtolower($param);
+            $param = mb_strtolower($param, 'UTF-8');
             #Strip 'innodb_defragment_' for consistency, while allowing it to be sent by user
             $param = str_replace('innodb_defragment_', '', $param);
             #Check if it's supported
@@ -859,7 +822,7 @@ class optimizeTables
                 if ($param === 'fill_factor') {
                     $this->defragParams[$param] = $value;
                 } else {
-                    $this->defragParams[$param] = intval($value);
+                    $this->defragParams[$param] = (int)$value;
                 }
             } else {
                 throw new \UnexpectedValueException('Unsupported innodb_defragment_* parameter provided.');
@@ -872,9 +835,8 @@ class optimizeTables
     {
         if ($this->maintenanceFlag['table'] !== null) {
             return 'UPDATE `'.$this->maintenanceFlag['table'].'` SET '.$this->maintenanceFlag['value_column'].' = true WHERE `'.$this->maintenanceFlag['table'].'`.`'.$this->maintenanceFlag['setting_column'].'` = \''.$this->maintenanceFlag['setting_name'].'\';';
-        } else {
-            return null;
         }
+        return null;
     }
 
     public function setMaintenance(string $table, string $setting_column, string $setting_name, string $value_column): self
@@ -891,7 +853,7 @@ class optimizeTables
     public function setDays(string $action, int $days): self
     {
         if ($this->checkAction($action)) {
-            $action = strtolower($action);
+            $action = mb_strtolower($action, 'UTF-8');
             if ($days < 0) {
                 $days = 0;
             }
@@ -903,11 +865,10 @@ class optimizeTables
     public function getDays(string $action): int
     {
         if ($this->checkAction($action)) {
-            $action = strtolower($action);
+            $action = mb_strtolower($action, 'UTF-8');
             return $this->days[$action];
-        } else {
-            return 30;
         }
+        return 30;
     }
 
     public function setExclusions(string $action, string $table, string|array|null $column = NULL): self
@@ -919,14 +880,12 @@ class optimizeTables
                 $this->exclude['compress'] = $this->exclude['analyze'] = $this->exclude['check'] = $this->exclude['optimize'] = $this->exclude['repair'] = $table;
                 #Histograms are special, since can allow exclusion of columns
                 $this->excludeHistogram($table, $column);
-            } else {
-                if ($this->checkAction($action)) {
-                    $action = strtolower($action);
-                    if ($action === 'histogram') {
-                        $this->excludeHistogram($table, $column);
-                    } else {
-                        $this->exclude[$action][] = $table;
-                    }
+            } elseif ($this->checkAction($action)) {
+                $action = mb_strtolower($action, 'UTF-8');
+                if ($action === 'histogram') {
+                    $this->excludeHistogram($table, $column);
+                } else {
+                    $this->exclude[$action][] = $table;
                 }
             }
         }
@@ -935,11 +894,9 @@ class optimizeTables
 
     public function getExclusions(string $action = ''): array
     {
-        if ($action !== '') {
-            if ($this->checkAction($action)) {
-                $action = strtolower($action);
-                return $this->exclude[$action];
-            }
+        if ($action !== '' && $this->checkAction($action)) {
+            $action = mb_strtolower($action, 'UTF-8');
+            return $this->exclude[$action];
         }
         #If no valid action name is sent - show all exclusions
         return $this->exclude;
