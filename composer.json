@@ -1,7 +1,13 @@
 {
     "name": "simbiat/optimize-tables",
     "type": "library",
-    "keywords": ["optimize","mysql","pdo","table","php"],
+    "keywords": [
+        "optimize",
+        "mysql",
+        "pdo",
+        "table",
+        "php"
+    ],
     "description": "Library optimize tables in database.",
     "homepage": "https://github.com/Simbiat/optimize-table",
     "license": "AGPL-3.0-or-later",
@@ -22,8 +28,8 @@
             "Simbiat\\": "src/"
         }
     },
-	"support": {
-		"issues": "https://github.com/Simbiat/optimize-tables/issues",
-		"source": "https://github.com/Simbiat/optimize-tables"
-	}
+    "support": {
+        "issues": "https://github.com/Simbiat/optimize-tables/issues",
+        "source": "https://github.com/Simbiat/optimize-tables"
+    }
 }

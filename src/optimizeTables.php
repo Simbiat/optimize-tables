@@ -1,9 +1,15 @@
 <?php
-declare(strict_types=1);
+declare(strict_types = 1);
+
 namespace Simbiat;
 
 use Simbiat\Database\Controller;
 
+use function in_array;
+
+/**
+ * Optimize MySQL tables
+ */
 class optimizeTables
 {
     private object $db_controller;
@@ -80,13 +86,13 @@ class optimizeTables
     #Flag for whether CRON is used
     private ?Cron $cron = NULL;
     private bool $cronEnable = false;
-
+    
     /**
      * @throws \Exception
      */
     public function __construct()
     {
-        $this->db_controller = (new Controller);
+        $this->db_controller = (new Controller());
         #Checking if we are using 'file per table' for INNODB tables
         $innodb_file_per_table = $this->db_controller->selectColumn('SHOW GLOBAL VARIABLES WHERE `variable_name`=\'innodb_file_per_table\';', [], 1)[0];
         #Checking INNODB format
@@ -99,7 +105,7 @@ class optimizeTables
         }
         #Checking if MariaDB is used and if it's new enough to support INNODB Defragmentation
         $version = $this->db_controller->selectColumn('SELECT VERSION();')[0];
-        if (false !== mb_stripos($version, 'MariaDB', encoding: 'UTF-8')) {
+        if (false !== mb_stripos($version, 'MariaDB', 0, 'UTF-8')) {
             if (version_compare(mb_strtolower($version, 'UTF-8'), '10.1.1-mariadb', 'ge')) {
                 $this->features_support['innodb_defragment'] = true;
                 if (version_compare(mb_strtolower($version, 'UTF-8'), '10.3.7-mariadb', 'ge')) {
@@ -116,18 +122,22 @@ class optimizeTables
             $this->features_support['histogram'] = true;
         }
         #Check if SET GLOBAL is possible
-        if ($this->db_controller->count("SELECT COUNT(*) FROM `information_schema`.`USER_PRIVILEGES` WHERE GRANTEE=CONCAT('\'', SUBSTRING_INDEX(CURRENT_USER(), '@', 1), '\'@\'', SUBSTRING_INDEX(CURRENT_USER(), '@', -1), '\'') AND `PRIVILEGE_TYPE` IN ('SUPER', 'SYSTEM_VARIABLES_ADMIN');") > 0) {
+        if ($this->db_controller->count("SELECT COUNT(*) as `count` FROM `information_schema`.`USER_PRIVILEGES` WHERE GRANTEE=CONCAT('\'', SUBSTRING_INDEX(CURRENT_USER(), '@', 1), '\'@\'', SUBSTRING_INDEX(CURRENT_USER(), '@', -1), '\'') AND `PRIVILEGE_TYPE` IN ('SUPER', 'SYSTEM_VARIABLES_ADMIN');") > 0) {
             $this->features_support['set_global'] = true;
         }
         $this->curTime = time();
         #Checking if CRON is used
-        if (method_exists(Cron::class,'setSetting')) {
+        if (method_exists(Cron::class, 'setSetting')) {
             $this->cron = (new Cron());
-            $this->cronEnable = $this->cron::$enabled;
+            $this->cronEnable = Cron::$enabled;
         }
     }
-
+    
     /**
+     * Analyze tables to see which require optimization
+     *
+     * @param string $schema Name of the schema to analyze
+     * @param bool   $auto   If `false` - use `COMMANDS` key to list all commands suggested for a table. If `true`, will have separate key for each type of optimization. `true` is normally expected to be used during optimization process itself.
      * @throws \Exception
      */
     public function analyze(string $schema, bool $auto = false): array
@@ -153,7 +163,7 @@ class optimizeTables
         $this->toSetup();
         #Setting reversal
         $this->toDefault();
-        foreach ($tables as $name=>$table) {
+        foreach ($tables as $name => $table) {
             $tables[$name]['TO_COMPRESS'] = $this->checkAdd('compress', $table);
             if ($tables[$name]['TO_COMPRESS']) {
                 $tables[$name]['TO_ANALYZE'] = false;
@@ -170,12 +180,13 @@ class optimizeTables
             }
             #If table is InnoDB and compression is possible and allowed - suggest compression only, since OPTIMIZE will be redundant after this. This also will not work
             if ($tables[$name]['TO_COMPRESS']) {
-                if ($this->features_support['alter_algorithm'] && (int)$tables[ $name ]['FULLTEXT'] > 1) {
+                if ($this->features_support['alter_algorithm'] && (int)$tables[$name]['FULLTEXT'] > 1) {
                     #InnoDB does not support table INPLACE rebuild when there are multiple FULLTEXT indexes, thus we have to use COPY algorithm
-                    $tables[$name]['COMPRESS'] = $tables[$name]['COMMANDS'][] = 'ALTER TABLE `'.$this->schema.'`.`'.$table['TABLE_NAME'].'` ROW_FORMAT=COMPRESSED ALGORITHM=COPY;';
+                    $tables[$name]['COMPRESS'] = 'ALTER TABLE `'.$this->schema.'`.`'.$table['TABLE_NAME'].'` ROW_FORMAT=COMPRESSED ALGORITHM=COPY;';
                 } else {
-                    $tables[$name]['COMPRESS'] = $tables[$name]['COMMANDS'][] = 'ALTER TABLE `' . $this->schema . '`.`' . $table['TABLE_NAME'] . '` ROW_FORMAT=COMPRESSED;';
+                    $tables[$name]['COMPRESS'] = 'ALTER TABLE `'.$this->schema.'`.`'.$table['TABLE_NAME'].'` ROW_FORMAT=COMPRESSED;';
                 }
+                $tables[$name]['COMMANDS'][] = $tables[$name]['COMPRESS'];
             } else {
                 #If we are not compressing and table has actual rows - add CHECK, REPAIR, ANALYZE and Histograms if they are allowed and supported
                 if ($tables[$name]['TO_OPTIMIZE']) {
@@ -187,27 +198,33 @@ class optimizeTables
                             $tables[$name]['COMMANDS'][] = 'SET @@GLOBAL.innodb_optimize_fulltext_only=false;';
                         }
                     }
-                    $tables[$name]['OPTIMIZE'] = $tables[$name]['COMMANDS'][] = 'OPTIMIZE TABLE `'.$this->schema.'`.`'.$table['TABLE_NAME'].'`;';
+                    $tables[$name]['OPTIMIZE'] = 'OPTIMIZE TABLE `'.$this->schema.'`.`'.$table['TABLE_NAME'].'`;';
+                    $tables[$name]['COMMANDS'][] = $tables[$name]['OPTIMIZE'];
                 }
                 if ($tables[$name]['TO_CHECK']) {
-                    $tables[$name]['CHECK'] = $tables[$name]['COMMANDS'][] = 'CHECK TABLE `'.$this->schema.'`.`'.$table['TABLE_NAME'].'` FOR UPGRADE EXTENDED;';
+                    $tables[$name]['CHECK'] = 'CHECK TABLE `'.$this->schema.'`.`'.$table['TABLE_NAME'].'` FOR UPGRADE EXTENDED;';
+                    $tables[$name]['COMMANDS'][] = $tables[$name]['CHECK'];
                 }
                 if ($tables[$name]['TO_REPAIR']) {
-                    $tables[$name]['REPAIR'] = $tables[$name]['COMMANDS'][] = 'REPAIR TABLE `'.$this->schema.'`.`'.$table['TABLE_NAME'].'` EXTENDED;';
+                    $tables[$name]['REPAIR'] = 'REPAIR TABLE `'.$this->schema.'`.`'.$table['TABLE_NAME'].'` EXTENDED;';
+                    $tables[$name]['COMMANDS'][] = $tables[$name]['REPAIR'];
                 }
                 if ($tables[$name]['TO_ANALYZE']) {
-                    $tables[$name]['ANALYZE'] = $tables[$name]['COMMANDS'][] = 'ANALYZE TABLE `'.$this->schema.'`.`'.$table['TABLE_NAME'].'`;';
+                    $tables[$name]['ANALYZE'] = 'ANALYZE TABLE `'.$this->schema.'`.`'.$table['TABLE_NAME'].'`;';
+                    $tables[$name]['COMMANDS'][] = $tables[$name]['ANALYZE'];
                 }
                 if ($tables[$name]['TO_HISTOGRAM']) {
                     if ($this->features_support['histogram']) {
                         $columns = $this->db_controller->selectColumn('SELECT `COLUMN_NAME` FROM `information_schema`.`COLUMNS` WHERE `TABLE_SCHEMA`=\''.$this->schema.'\' AND `TABLE_NAME`=\''.$table['TABLE_NAME'].'\' AND `GENERATION_EXPRESSION` IS NULL AND `COLUMN_KEY` IN (\'\', \'MUL\') AND `DATA_TYPE` NOT IN (\'JSON\', \'GEOMETRY\', \'POINT\', \'LINESTRING\', \'POLYGON\', \'MULTIPOINT\', \'MULTILINESTRING\', \'MULTIPOLYGON\', \'GEOMETRYCOLLECTION\')'.(empty($this->getExclusions('histogram')[$name]) ? '' : ' AND `COLUMN_NAME` NOT IN(\''.implode('\' \'', $this->getExclusions('histogram')[$name]).'\')'));
                         if ($columns) {
-                            $tables[$name]['HISTOGRAM'] = $tables[$name]['COMMANDS'][] = 'ANALYZE TABLE `'.$this->schema.'`.`'.$table['TABLE_NAME'].'` UPDATE HISTOGRAM ON `'.implode('`, `', $columns).'`';
+                            $tables[$name]['HISTOGRAM'] = 'ANALYZE TABLE `'.$this->schema.'`.`'.$table['TABLE_NAME'].'` UPDATE HISTOGRAM ON `'.implode('`, `', $columns).'`';
+                            $tables[$name]['COMMANDS'][] = $tables[$name]['HISTOGRAM'];
                         } else {
                             $tables[$name]['TO_HISTOGRAM'] = false;
                         }
                     } elseif ($this->features_support['analyze_persistent']) {
-                        $tables[$name]['HISTOGRAM'] = $tables[$name]['COMMANDS'][] = 'ANALYZE TABLE `'.$this->schema.'`.`'.$table['TABLE_NAME'].'` PERSISTENT FOR ALL;';
+                        $tables[$name]['HISTOGRAM'] = 'ANALYZE TABLE `'.$this->schema.'`.`'.$table['TABLE_NAME'].'` PERSISTENT FOR ALL;';
+                        $tables[$name]['COMMANDS'][] = $tables[$name]['HISTOGRAM'];
                     }
                 }
             }
@@ -226,7 +243,15 @@ class optimizeTables
         }
         return $tables;
     }
-
+    
+    /**
+     * Optimize the tables
+     * @param string $schema    Name of schema to optimize
+     * @param bool   $showStats Whether to return statistics (`true`) or logs (`false`)
+     * @param bool   $silent    If set to `true` will return `true` or `false` instead of logs or statistics
+     *
+     * @return bool|array|string
+     */
     public function optimize(string $schema, bool $showStats = false, bool $silent = false): bool|array|string
     {
         try {
@@ -239,7 +264,8 @@ class optimizeTables
             }
             #Getting initial list of tables to process
             $this->log('Getting list of tables...');
-            $tables = $this->jsonData['before'] = $this->analyze($this->schema, true);
+            $tables = $this->analyze($this->schema, true);
+            $this->jsonData['before'] = $tables;
             #Skip any actions, if no tables for actions were returned
             if (!in_array(true, array_column($tables, 'TO_COMPRESS'), true) && !in_array(true, array_column($tables, 'TO_OPTIMIZE'), true) && !in_array(true, array_column($tables, 'TO_CHECK'), true) && !in_array(true, array_column($tables, 'TO_REPAIR'), true) && !in_array(true, array_column($tables, 'TO_ANALYZE'), true) && !in_array(true, array_column($tables, 'TO_HISTOGRAM'), true)) {
                 $this->log('No tables to process were returned. Skipping...');
@@ -258,7 +284,7 @@ class optimizeTables
             $this->toSetup(true);
             #Checking for tables, that need to be compressed
             $refresh = false;
-            foreach ($tables as $name=>$data) {
+            foreach ($tables as $name => $data) {
                 if ($data['TO_COMPRESS'] && $this->toRun('compress', $name, $data['COMPRESS'])) {
                     $refresh = true;
                 }
@@ -273,7 +299,7 @@ class optimizeTables
             $refresh = false;
             #Checking if refreshed list is not empty
             if (!empty($tables)) {
-                foreach ($tables as $name=>$data) {
+                foreach ($tables as $name => $data) {
                     if ($data['FULLTEXT'] && $data['TO_OPTIMIZE'] && $this->toRun('optimize', $name, $data['OPTIMIZE'], true)) {
                         $refresh = true;
                     }
@@ -287,7 +313,7 @@ class optimizeTables
             #Doing the rest of optimization if any
             #Checking, if refreshed list is not empty
             if (!empty($tables)) {
-                foreach ($tables as $name=>$data) {
+                foreach ($tables as $name => $data) {
                     if ($data['TO_OPTIMIZE']) {
                         $this->toRun('optimize', $name, $data['OPTIMIZE']);
                     }
@@ -315,12 +341,13 @@ class optimizeTables
                 return $this->showStats();
             }
             return $this->jsonData['logs'];
-        } catch(\Exception $e) {
+        } catch (\Exception $e) {
             return $e->getMessage()."\r\n".$e->getTraceAsString();
         }
     }
-
+    
     /**
+     * Show statistics
      * @throws \JsonException
      */
     public function showStats(): array
@@ -328,7 +355,7 @@ class optimizeTables
         $json = $this->jsonRead();
         if (!empty($json)) {
             $stats = [];
-            foreach ($json['before'] as $name=>$data) {
+            foreach ($json['before'] as $name => $data) {
                 if ($data['TO_COMPRESS'] || $data['TO_OPTIMIZE']) {
                     #Whether we table got compressed
                     if ($data['ROW_FORMAT'] !== $json['after'][$name]['ROW_FORMAT']) {
@@ -360,12 +387,12 @@ class optimizeTables
         }
         return [];
     }
-
+    
     #####################
     #   SQL commands    #
     #####################
-    #Function to update settings before optimizations
     /**
+     * Function to update settings before optimizations
      * @throws \Exception
      */
     private function toSetup(bool $run = false): void
@@ -375,12 +402,12 @@ class optimizeTables
             if ($this->runMaintenance($this->schema)) {
                 $this->log('Updating settings for optimization...');
                 foreach ($this->presetting as $query) {
-                    $this->log('Attempting to update setting \'' . $query . '\'...');
+                    $this->log('Attempting to update setting \''.$query.'\'...');
                     try {
                         $this->db_controller->query($query);
                         $this->log('Successfully updated setting.');
                     } catch (\Exception $e) {
-                        $this->log('Failed to update setting with error: ' . $e->getMessage());
+                        $this->log('Failed to update setting with error: '.$e->getMessage());
                     }
                 }
             }
@@ -396,7 +423,7 @@ class optimizeTables
             if ($this->features_support['innodb_defragment'] && $this->features_support['set_global']) {
                 $this->presetting[] = 'SET @@GLOBAL.innodb_defragment=true;';
                 #Setting the defrag parameters if any was overridden
-                foreach ($this->getDefragParam() as $defragParam=>$defragValue) {
+                foreach ($this->getDefragParam() as $defragParam => $defragValue) {
                     if ($defragValue !== null) {
                         $this->presetting[] = 'SET @@GLOBAL.innodb_defragment_'.$defragParam.'='.$defragValue.';';
                     }
@@ -404,10 +431,10 @@ class optimizeTables
             }
         }
     }
-
-    #Function to force reversal of any potentially changed values in case of errors
-
+    
     /**
+     * Function to force reversal of any potentially changed values in case of errors
+     * @param bool $run Actually run the commands (`true`) or just prepare them (`false`)
      * @throws \Exception
      */
     private function toDefault(bool $run = false): void
@@ -434,7 +461,7 @@ class optimizeTables
             }
             if ($this->features_support['innodb_defragment'] && $this->features_support['set_global']) {
                 $this->postSetting[] = 'SET @@GLOBAL.innodb_defragment=DEFAULT;';
-                foreach ($this->getDefragParam() as $defragParam=>$defragValue) {
+                foreach ($this->getDefragParam() as $defragParam => $defragValue) {
                     if ($defragValue !== null) {
                         $this->postSetting[] = 'SET @@GLOBAL.innodb_defragment_'.$defragParam.'=DEFAULT;';
                     }
@@ -445,40 +472,55 @@ class optimizeTables
             }
         }
     }
-
+    
+    /**
+     * Runs respective action on the table
+     * @param string $action   Action name
+     * @param string $name     Table name
+     * @param string $command  Actual command
+     * @param bool   $fulltext Whether we are dealing with fulltext action or not
+     *
+     * @return bool
+     */
     private function toRun(string $action, string $name, string $command, bool $fulltext = false): bool
     {
         $action = mb_strtolower($action, 'UTF-8');
         if ($this->checkAction($action)) {
-            $verbs = match($action) {
+            $verbs = match ($action) {
                 'compress', 'check', 'repair' => ['start' => ucfirst($action).'ing', 'success' => $action.'ed', 'failure' => $action],
-                'histogram' => ['start' => 'Creating histograms for','success' => 'created histograms for', 'failure' => 'create histograms for'],
+                'histogram' => ['start' => 'Creating histograms for', 'success' => 'created histograms for', 'failure' => 'create histograms for'],
                 'analyze', 'optimize' => ['start' => ucfirst(mb_substr($action, 0, -1, 'UTF-8').'ing'), 'success' => $action.'d', 'failure' => $action],
             };
-            try {
-                if ($fulltext && $this->features_support['set_global']) {
-                    $this->log('Enabling FULLTEXT optimization for `'.$name.'`...');
+            if ($fulltext && $this->features_support['set_global']) {
+                $this->log('Enabling FULLTEXT optimization for `'.$name.'`...');
+                try {
                     $this->db_controller->query('SET @@GLOBAL.innodb_optimize_fulltext_only=true;');
+                } catch (\Exception $e) {
+                    #We do not want to cancel everything in case of an issue with just one table
+                    $this->log('Failed to enable `innodb_optimize_fulltext_only` on `'.$name.'` with error: '.$e->getMessage());
                 }
-                $this->log($verbs['start'].' `'.$name.'`...');
-                #Get time when action started
-                $start = array_key_last($this->jsonData['logs']);
+            }
+            $this->log($verbs['start'].' `'.$name.'`...');
+            #Get time when action started
+            $start = array_key_last($this->jsonData['logs']);
+            try {
                 $this->db_controller->query($command);
-                $this->jsonData['before'][$name][mb_strtoupper($action, 'UTF-8').'_DATE'] = $this->curTime;
-                $this->log('Successfully '.$verbs['success'].' `'.$name.'`.');
-                $this->jsonData['before'][$name][mb_strtoupper($action, 'UTF-8').'_TIME'] = array_key_last($this->jsonData['logs']) - $start;
-                return true;
             } catch (\Exception $e) {
                 #We do not want to cancel everything in case of an issue with just one table
-                $this->log('Failed to '.$verbs['failure'].'  `'.$name.'` with error: '.$e->getMessage());
+                $this->log('Failed to '.$verbs['failure'].' `'.$name.'` with error: '.$e->getMessage());
             }
+            $this->jsonData['before'][$name][mb_strtoupper($action, 'UTF-8').'_DATE'] = $this->curTime;
+            $this->log('Successfully '.$verbs['success'].' `'.$name.'`.');
+            $this->jsonData['before'][$name][mb_strtoupper($action, 'UTF-8').'_TIME'] = array_key_last($this->jsonData['logs']) - $start;
+            return true;
         }
         return false;
     }
-
-    #Enable or disable maintenance mode if using any
-
+    
     /**
+     * Enable or disable maintenance mode if using any
+     * @param string $schema Which schema to use
+     * @param bool   $on     Whether to enable or disable maintenance
      * @throws \Exception
      */
     private function runMaintenance(string $schema, bool $on = true): bool
@@ -508,8 +550,7 @@ class optimizeTables
             return true;
         }
     }
-
-
+    
     #####################
     #  JSON functions   #
     #####################
@@ -537,7 +578,7 @@ class optimizeTables
         }
         $this->jsonData = $json;
     }
-
+    
     /**
      * @throws \JsonException
      */
@@ -551,7 +592,7 @@ class optimizeTables
             if ($json !== false && $json !== '') {
                 $json = json_decode($json, true, 512, JSON_INVALID_UTF8_SUBSTITUTE | JSON_OBJECT_AS_ARRAY | JSON_THROW_ON_ERROR);
                 if ($json !== NULL) {
-                    if (!is_array($json)) {
+                    if (!\is_array($json)) {
                         $json = [];
                     }
                 } else {
@@ -563,10 +604,9 @@ class optimizeTables
         }
         return $json;
     }
-
-    #Dump JSON data to file
-
+    
     /**
+     * Dump JSON data to file
      * @throws \JsonException
      * @throws \Exception
      */
@@ -576,7 +616,7 @@ class optimizeTables
         if ($afterStats) {
             $this->jsonData['after'] = $this->analyze($this->schema, true);
             #Copying dates to 'after' set for future use and unsetting separate commands, since they are not needed in statistics
-            foreach ($this->jsonData['before'] as $name=> $data) {
+            foreach ($this->jsonData['before'] as $name => $data) {
                 if (isset($data['COMPRESS_DATE'])) {
                     $this->jsonData['after'][$name]['COMPRESS_DATE'] = $data['COMPRESS_DATE'];
                 } elseif (isset($this->jsonData['previous'][$name]['COMPRESS_DATE'])) {
@@ -617,20 +657,30 @@ class optimizeTables
         unset($this->jsonData['previous']);
         file_put_contents($this->getJsonPath(), json_encode($this->jsonData, JSON_INVALID_UTF8_SUBSTITUTE | JSON_OBJECT_AS_ARRAY | JSON_THROW_ON_ERROR | JSON_PRESERVE_ZERO_FRACTION | JSON_PRETTY_PRINT));
     }
-
+    
     #####################
     #      Helpers      #
     #####################
-    #Simplify logging (somewhat)
+    /**
+     * Log action to JSON
+     * @param string $logLine
+     *
+     * @return void
+     */
     private function log(string $logLine): void
     {
         #Get microseconds (since some operations may be too quick to store on an array with time as keys)
-        $micro = date_create_from_format( 'U.u', number_format(microtime(true), 6, '.', ''))->format('Uu');
+        $micro = date_create_from_format('U.u', number_format(microtime(true), 6, '.', ''))->format('Uu');
         #Write to log
         $this->jsonData['logs'][$micro] = $logLine;
     }
-
-    #Check if proper action type is used
+    
+    /**
+     * Check if proper action type is used
+     * @param string $action
+     *
+     * @return bool
+     */
     private function checkAction(string $action): bool
     {
         if (in_array(mb_strtolower($action, 'UTF-8'), ['analyze', 'check', 'compress', 'histogram', 'optimize', 'repair'])) {
@@ -638,8 +688,14 @@ class optimizeTables
         }
         throw new \UnexpectedValueException('Wrong action type provided ('.$action.'). Only ANALYZE, CHECK, COMPRESS, HISTOGRAM, OPTIMIZE and REPAIR are supported.');
     }
-
-    #Check if enough time has passed since last $action was applied to the table
+    
+    /**
+     * #heck if enough time has passed since last `$action` was applied to the table
+     * @param string $action   Action type
+     * @param int    $prevTime Previous run timestamp
+     *
+     * @return bool
+     */
     private function checkAge(string $action, int $prevTime): bool
     {
         if ($prevTime <= 0) {
@@ -652,8 +708,14 @@ class optimizeTables
         }
         return ($this->curTime - $prevTime) >= $days * 86400;
     }
-
-    #Check if there were any changes since previous optimization
+    
+    /**
+     * Check if there were any changes since previous optimization
+     * @param array $table      Table name.
+     * @param bool  $zeroMatter Flag indicating whether we care if consider potential change even if there is no clear sign of it. Needed for certain types of actions.
+     *
+     * @return bool
+     */
     private function checkChange(array $table, bool $zeroMatter = false): bool
     {
         if (!isset($this->jsonData['previous'][$table['TABLE_NAME']])) {
@@ -685,8 +747,14 @@ class optimizeTables
         }
         return false;
     }
-
-    #Function to check whether specific command needs to be added to the table. Separating this from analyze() for a bit cleaner looking code
+    
+    /**
+     * Check whether specific command needs to be added to the table
+     * @param string $action Action type
+     * @param array  $table  Table name
+     *
+     * @return bool
+     */
     private function checkAdd(string $action, array $table): bool
     {
         $action = mb_strtolower($action, 'UTF-8');
@@ -729,15 +797,21 @@ class optimizeTables
         }
         return false;
     }
-
-    #Function to exclude tables from histogram creation with support of columns exclusion for MySQL 8+ histograms
+    
+    /**
+     * Function to exclude tables from histogram creation with support of columns exclusion for MySQL 8+ histograms
+     * @param string            $table  Name of the table
+     * @param string|array|null $column Column or list all columns
+     *
+     * @return void
+     */
     private function excludeHistogram(string $table, string|array|null $column = NULL): void
     {
         $this->exclude['histogram'][$table] = [];
-        if (!is_null($column)) {
-            if (is_string($column) && preg_match('/(.*[^\x{0001}-\x{FFFF}].*)|(.*\s+$)|(^\d+$)|(^\d+e\d+.*)(^$)/miu', $column) === 0) {
+        if ($column !== null) {
+            if (\is_string($column) && preg_match('/(.*[^\x{0001}-\x{FFFF}].*)|(.*\s+$)|(^\d+$)|(^\d+e\d+.*)(^$)/miu', $column) === 0) {
                 $this->exclude['histogram'][$table][] = $column;
-            } elseif (is_array($column)) {
+            } elseif (\is_array($column)) {
                 foreach ($column as $colName) {
                     if (preg_match('/(.*[^\x{0001}-\x{FFFF}].*)|(.*\s+$)|(^\d+$)|(^\d+e\d+.*)(^$)/miu', $colName) === 0) {
                         $this->exclude['histogram'][$table][] = $colName;
@@ -746,15 +820,25 @@ class optimizeTables
             }
         }
     }
-
+    
     #####################
     #Setters and getters#
     #####################
+    /**
+     * Get current threshold
+     * @return float
+     */
     public function getThreshold(): float
     {
         return $this->threshold;
     }
-
+    
+    /**
+     * Set a threshold for fragmentation of table data. If the current value is more or equal to this value - table will be suggested for OPTIMIZE.
+     * @param float $threshold
+     *
+     * @return $this
+     */
     public function setThreshold(float $threshold): self
     {
         #Negative values do not make sense in this case, so reverting them to 0 for consistency
@@ -768,7 +852,13 @@ class optimizeTables
         $this->threshold = $threshold;
         return $this;
     }
-
+    
+    /**
+     * Check if it's allowed to suggest selected action
+     * @param string $action
+     *
+     * @return bool
+     */
     public function getSuggest(string $action): bool
     {
         if ($this->checkAction($action)) {
@@ -777,7 +867,14 @@ class optimizeTables
         }
         return false;
     }
-
+    
+    /**
+     * Enable or disable suggestion of certain action types.
+     * @param string $action Action type
+     * @param bool   $flag   Enable flag
+     *
+     * @return $this
+     */
     public function setSuggest(string $action, bool $flag): self
     {
         if ($this->checkAction($action)) {
@@ -786,15 +883,25 @@ class optimizeTables
         }
         return $this;
     }
-
+    
+    /**
+     * Get current path to JSON file
+     * @return string
+     */
     public function getJsonPath(): string
     {
         if ($this->jsonpath === '') {
-            return dirname(__DIR__).'/tables.json';
+            return \dirname(__DIR__).'/tables.json';
         }
         return $this->jsonpath;
     }
-
+    
+    /**
+     * Set path to save statistics, which are necessary for all consecutive runs. By default, file `tables.json` will be written to system's temporary folder.
+     * @param string $jsonpath
+     *
+     * @return $this
+     */
     public function setJsonPath(string $jsonpath): self
     {
         #If provided path is a directory - append filename
@@ -804,12 +911,23 @@ class optimizeTables
         $this->jsonpath = $jsonpath;
         return $this;
     }
-
+    
+    /**
+     * Get current `innodb_defragment` settings (MariaDB 10.1.1 and up only)
+     * @return array|null[]
+     */
     public function getDefragParam(): array
     {
         return $this->defragParams;
     }
-
+    
+    /**
+     * Change `innodb_defragment` settings (MariaDB 10.1.1 and up only)
+     * @param string $param Setting to change
+     * @param float  $value New value
+     *
+     * @return $this
+     */
     public function setDefragParam(string $param, float $value): self
     {
         if ($this->features_support['innodb_defragment']) {
@@ -818,7 +936,7 @@ class optimizeTables
             #Strip 'innodb_defragment_' for consistency, while allowing it to be sent by user
             $param = str_replace('innodb_defragment_', '', $param);
             #Check if it's supported
-            if (array_key_exists($param, $this->defragParams)) {
+            if (\array_key_exists($param, $this->defragParams)) {
                 if ($param === 'fill_factor') {
                     $this->defragParams[$param] = $value;
                 } else {
@@ -830,7 +948,11 @@ class optimizeTables
         }
         return $this;
     }
-
+    
+    /**
+     * Get current command to enable/disable maintenance mode
+     * @return string|null
+     */
     public function getMaintenance(): ?string
     {
         if ($this->maintenanceFlag['table'] !== null) {
@@ -838,18 +960,44 @@ class optimizeTables
         }
         return null;
     }
-
+    
+    /**
+     * Setup command to enable/disable maintenance mode
+     * @param string $table          Table name
+     * @param string $setting_column Column, where to search for the setting
+     * @param string $setting_name   Setting name
+     * @param string $value_column   Column, where the value of the setting is stored
+     *
+     * @return $this
+     */
     public function setMaintenance(string $table, string $setting_column, string $setting_name, string $value_column): self
     {
-        $this->maintenanceFlag = [
-            'table' => $table,
-            'setting_column' => $setting_column,
-            'setting_name' => $setting_name,
-            'value_column' => $value_column,
-        ];
+        $this->maintenanceFlag = compact('table', 'setting_column', 'setting_name', 'value_column');
         return $this;
     }
-
+    
+    /**
+     * Get current number of days to wait since previous run of an `$action`
+     * @param string $action
+     *
+     * @return int
+     */
+    public function getDays(string $action): int
+    {
+        if ($this->checkAction($action)) {
+            $action = mb_strtolower($action, 'UTF-8');
+            return $this->days[$action];
+        }
+        return 30;
+    }
+    
+    /**
+     * Set number of days to wait since previous run of an `$action` (same as in `setSuggest`). Unless the designated amount of time has passed the action will not be suggested for the table.
+     * @param string $action Action name
+     * @param int    $days   Number of days
+     *
+     * @return $this
+     */
     public function setDays(string $action, int $days): self
     {
         if ($this->checkAction($action)) {
@@ -861,23 +1009,42 @@ class optimizeTables
         }
         return $this;
     }
-
-    public function getDays(string $action): int
+    
+    /**
+     * Get current list of exclusions
+     * @param string $action
+     *
+     * @return array|array[]
+     */
+    public function getExclusions(string $action = ''): array
     {
-        if ($this->checkAction($action)) {
+        if ($action !== '' && $this->checkAction($action)) {
             $action = mb_strtolower($action, 'UTF-8');
-            return $this->days[$action];
+            return $this->exclude[$action];
         }
-        return 30;
+        #If no valid action name is sent - show all exclusions
+        return $this->exclude;
     }
-
+    
+    /**
+     * Set tables (and columns) to exclude from certain types of optimizations
+     * @param string            $action Action to exclude. If empty string, all actions will be excluded.
+     * @param string            $table  Table for which the action is to be excluded.
+     * @param string|array|null $column Column or array of columns to exclude from HISTOGRAM command (MySQL 8.0 and up only).
+     *
+     * @return $this
+     */
     public function setExclusions(string $action, string $table, string|array|null $column = NULL): self
     {
         #Do not do anything if no table name is provided or table name consists of bad characters or patterns
         if ($table !== '' && preg_match('/(.*[^\x{0001}-\x{FFFF}].*)|(.*\s+$)|(^\d+$)|(^\d+e\d+.*)(^$)/miu', $table) === 0) {
             if ($action === '') {
                 #If no action name is sent - add table to all types
-                $this->exclude['compress'] = $this->exclude['analyze'] = $this->exclude['check'] = $this->exclude['optimize'] = $this->exclude['repair'] = $table;
+                $this->exclude['compress'] = $table;
+                $this->exclude['analyze'] = $table;
+                $this->exclude['check'] = $table;
+                $this->exclude['optimize'] = $table;
+                $this->exclude['repair'] = $table;
                 #Histograms are special, since can allow exclusion of columns
                 $this->excludeHistogram($table, $column);
             } elseif ($this->checkAction($action)) {
@@ -890,15 +1057,5 @@ class optimizeTables
             }
         }
         return $this;
-    }
-
-    public function getExclusions(string $action = ''): array
-    {
-        if ($action !== '' && $this->checkAction($action)) {
-            $action = mb_strtolower($action, 'UTF-8');
-            return $this->exclude[$action];
-        }
-        #If no valid action name is sent - show all exclusions
-        return $this->exclude;
     }
 }

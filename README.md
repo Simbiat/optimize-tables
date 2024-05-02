@@ -1,8 +1,11 @@
 # Database Tables Optimizer
+
 This library is developed to allow bulk optimization of tables in MySQL (MariaDB and, potentially, other forks). While MS SQL has its Maintenance Plan Wizard, there is nothing like that for MySQL.
 
 # Benefits
+
 One may think that simply getting list of tables and running OPTIMIZE against them is enough, but in reality, it's not that simple:
+
 - Not all tables support OPTIMIZE.
 - There are some special parameters that may improve OPTIMIZE results in some cases.
 - Some tables may benefit from CHECK and REPAIR commands as well. In fact, it's useful to periodically run CHECK to avoid potential corruption of a table.
@@ -13,15 +16,20 @@ One may think that simply getting list of tables and running OPTIMIZE against th
 This library aims to cover all these points in as smart a manner, as was possible at the moment of writing. For details refer Usage section of this readme or comments in the code.
 
 # Requirements
+
 - [SimbiatDB](https://github.com/Simbiat/database)
 - MySQL or MariaDB
 
 # Usage
+
 To use the library you need to establish connection with your database through [SimbiatDB](https://github.com/Simbiat/database) library and then call this:
+
 ```php
 (new \Simbiat\optimizeTables)->analyze('schema');
 ```
+
 The output will look like this:
+
 ```php
 array (
   'bic__bik_swif' =>
@@ -58,12 +66,16 @@ array (
   ),
 )
 ```
+
 `schema` means the name of the database/schema you want to analyze. This command will show you the list (as an array) of tables with some statistics and list of optimization commands they can/should be run for each table.
 After this you have an option to run them manually if you like some control. Alternatively, if you want to use the library in a `cron` or other scheduler you can run this:
+
 ```php
 (new \Simbiat\optimizeTables)->optimize('schema');
 ```
+
 This will analyze the tables and then run the suggested commands. The result of the function (by default) will be an array of log entries, where array keys are UNIX micro timestamps:
+
 ```php
 array (
   1586091446410816 => 'Getting list of tables...',
@@ -95,7 +107,9 @@ array (
   1586091762237817 => 'Maintenance mode disabled.',
 )
 ```
+
 This will also create a `tables.json` file with some more statistics, that will look like this:
+
 ```php
 {
     "logs": {
@@ -153,20 +167,29 @@ This will also create a `tables.json` file with some more statistics, that will 
     }
 }
 ```
+
 There is also possibility to get statistics from the last run by:
+
 ```php
 (new \Simbiat\optimizeTables)->showStats();
 ```
+
 This will show all tables, that were either compressed or had changes in their size statistics.
+
 In case you want these statistics to be returned instead of logs, you run this:
+
 ```php
 (new \Simbiat\optimizeTables)->optimize('schema', true);
 ```
+
 If you want to work with regular booleans, you can send one extra `true`:
+
 ```php
 (new \Simbiat\optimizeTables)->optimize('schema', true, true);
 ```
+
 Class supports disabling [\Simbiat\Cron](https://github.com/Simbiat/Cron) if it's present. If non-standard ('cron__') prefix is used for Cron, you need to pass it when creating the object:
+
 ```php
 (new \Simbiat\optimizeTables('alt__'));
 ```
@@ -174,46 +197,47 @@ Class supports disabling [\Simbiat\Cron](https://github.com/Simbiat/Cron) if it'
 This is it - easy to use. There are also some settings, that will allow you more control on what is done by `optimize()`.
 
 # Settings
+
 All settings can be chained together. To check current setting, you can replace `set` with `get` in the function name and remove parameter, which actually sets the value.
 <table>
-	<tr>
-		<th>Function</th>
-		<th>Parameters</th>
-		<th>Description</th>
-	</tr>
-	<tr>
-		<td><code>setThreshold</code></td>
-		<td><code>float $threshold</code></td>
-		<td>Set a threshold for fragmentation of table data. If the current value is more or equal to this value - table will be suggested for OPTIMIZE.</td>
-	</tr>
-	<tr>
-		<td><code>setSuggest</code></td>
-		<td><code>string $action, bool $flag</code></td>
-		<td>Flag allowing to suggest a command if flag is set to `true`. `$action` stands for appropriate command: `ANALYZE`, `CHECK`, `COMPRESS`, `OPTIMIZE`, `REPAIR` and `HISTOGRAM` (special case of `ANALYZE`).</td>
-	</tr>
-	<tr>
-		<td><code>setJsonPath</code></td>
-		<td><code>string $jsonpath</code></td>
-		<td>Path to save statistics, which are necessary for all consecutive runs. By default file `tables.json` will be written to system's temporary folder.</td>
-	</tr>
-	<tr>
-		<td><code>setDefragParam</code></td>
-		<td><code>string $param, float $value</code></td>
-		<td>MariaDB 10.1.1 implemented `innodb_defragment` flag with a set of settings for it. All of them can be set through this function, if non-default are required. Their names can be sent without the `innodb_defragment` prefix.</td>
-	</tr>
-	<tr>
-		<td><code>setMaintenance</code></td>
-		<td><code>string $table, string $setting_column, string $setting_name, string $value_column</code></td>
-		<td>Library can take quite some time to run and some commands may lock tables (fully or not), so it's advisable to prevent applications from communicating with them. Usually this is handled by having some kind of system parameter identifying an ongoing maintenance. `$table` stands for table name, `$setting_column` - name of the column where to search for `$setting_name`, that is name of the maintenance flag. `$value_column` is name of the column, which we will be updating.</td>
-	</tr>
-	<tr>
-		<td><code>setDays</code></td>
-		<td><code>string $action, int $days</code></td>
-		<td>Set number of days to wait since previous run of an `$action` (same as in `setSuggest`). Unless the designated amount of time has passed the action will not be suggested for the table.</td>
-	</tr>
-	<tr>
-		<td><code>setExclusions</code></td>
-		<td><code>string $action, string $table, $column = NULL</code></td>
-		<td>Exclude table(s) from processing for particular `$action`. In case of `histogram` you can also send list of columns to exclude from preparing histograms if we are on MySQL 8.0+. In order to avoid providing excessive columns to histograms' exclusion list, adding only 1 table at a time is allowed.</td>
-	</tr>
+    <tr>
+        <th>Function</th>
+        <th>Parameters</th>
+        <th>Description</th>
+    </tr>
+    <tr>
+        <td><code>setThreshold</code></td>
+        <td><code>float $threshold</code></td>
+        <td>Set a threshold for fragmentation of table data. If the current value is more or equal to this value - table will be suggested for OPTIMIZE.</td>
+    </tr>
+    <tr>
+        <td><code>setSuggest</code></td>
+        <td><code>string $action, bool $flag</code></td>
+        <td>Flag allowing to suggest a command if flag is set to `true`. `$action` stands for appropriate command: `ANALYZE`, `CHECK`, `COMPRESS`, `OPTIMIZE`, `REPAIR` and `HISTOGRAM` (special case of `ANALYZE`).</td>
+    </tr>
+    <tr>
+        <td><code>setJsonPath</code></td>
+        <td><code>string $jsonpath</code></td>
+        <td>Path to save statistics, which are necessary for all consecutive runs. By default file `tables.json` will be written to system's temporary folder.</td>
+    </tr>
+    <tr>
+        <td><code>setDefragParam</code></td>
+        <td><code>string $param, float $value</code></td>
+        <td>MariaDB 10.1.1 implemented `innodb_defragment` flag with a set of settings for it. All of them can be set through this function, if non-default are required. Their names can be sent without the `innodb_defragment` prefix.</td>
+    </tr>
+    <tr>
+        <td><code>setMaintenance</code></td>
+        <td><code>string $table, string $setting_column, string $setting_name, string $value_column</code></td>
+        <td>Library can take quite some time to run and some commands may lock tables (fully or not), so it's advisable to prevent applications from communicating with them. Usually this is handled by having some kind of system parameter identifying an ongoing maintenance. `$table` stands for table name, `$setting_column` - name of the column where to search for `$setting_name`, that is name of the maintenance flag. `$value_column` is name of the column, which we will be updating.</td>
+    </tr>
+    <tr>
+        <td><code>setDays</code></td>
+        <td><code>string $action, int $days</code></td>
+        <td>Set number of days to wait since previous run of an `$action` (same as in `setSuggest`). Unless the designated amount of time has passed the action will not be suggested for the table.</td>
+    </tr>
+    <tr>
+        <td><code>setExclusions</code></td>
+        <td><code>string $action, string $table, $column = NULL</code></td>
+        <td>Exclude table(s) from processing for particular `$action`. In case of `histogram` you can also send list of columns to exclude from preparing histograms if we are on MySQL 8.0+. In order to avoid providing excessive columns to histograms' exclusion list, adding only 1 table at a time is allowed.</td>
+    </tr>
 </table>
