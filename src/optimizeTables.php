@@ -83,9 +83,6 @@ class optimizeTables
     ];
     #Time of optimization take on class initiation
     private int $curTime;
-    #Flag for whether CRON is used
-    private ?Cron $cron = NULL;
-    private bool $cronEnable = false;
     
     /**
      * @throws \Exception
@@ -126,11 +123,6 @@ class optimizeTables
             $this->features_support['set_global'] = true;
         }
         $this->curTime = time();
-        #Checking if CRON is used
-        if (method_exists(Cron::class, 'setSetting')) {
-            $this->cron = (new Cron());
-            $this->cronEnable = Cron::$enabled;
-        }
     }
     
     /**
@@ -525,10 +517,6 @@ class optimizeTables
      */
     private function runMaintenance(string $schema, bool $on = true): bool
     {
-        #Update CRON if supported
-        if ($this->cron !== NULL && $this->cronEnable === true) {
-            $this->cron->setSetting('enabled', ($on === true ? 0 : 1));
-        }
         #Checking if the details for maintenance flag was provided
         if ($this->getMaintenance() !== null) {
             #Adding schema for consistency
