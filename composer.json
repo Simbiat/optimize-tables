@@ -21,7 +21,8 @@
     ],
     "require": {
         "php": "^8.3",
-        "simbiat/database": "^2"
+        "simbiat/database": "^2",
+        "ext-mbstring": "*"
     },
     "autoload": {
         "psr-4": {
