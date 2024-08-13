@@ -603,37 +603,24 @@ class optimizeTables
         #Get statistics after optimization, unless we quit early
         if ($afterStats) {
             $this->jsonData['after'] = $this->analyze($this->schema, true);
-            #Copying dates to 'after' set for future use and unsetting separate commands, since they are not needed in statistics
+            #Copying dates and times to 'after' set for future use and unsetting separate commands, since they are not needed in statistics
             foreach ($this->jsonData['before'] as $name => $data) {
-                if (isset($data['COMPRESS_DATE'])) {
-                    $this->jsonData['after'][$name]['COMPRESS_DATE'] = $data['COMPRESS_DATE'];
-                } elseif (isset($this->jsonData['previous'][$name]['COMPRESS_DATE'])) {
-                    $this->jsonData['after'][$name]['COMPRESS_DATE'] = $this->jsonData['previous'][$name]['COMPRESS_DATE'];
-                }
-                if (isset($data['OPTIMIZE_DATE'])) {
-                    $this->jsonData['after'][$name]['OPTIMIZE_DATE'] = $data['OPTIMIZE_DATE'];
-                } elseif (isset($this->jsonData['previous'][$name]['OPTIMIZE_DATE'])) {
-                    $this->jsonData['after'][$name]['OPTIMIZE_DATE'] = $this->jsonData['previous'][$name]['OPTIMIZE_DATE'];
-                }
-                if (isset($data['CHECK_DATE'])) {
-                    $this->jsonData['after'][$name]['CHECK_DATE'] = $data['CHECK_DATE'];
-                } elseif (isset($this->jsonData['previous'][$name]['CHECK_DATE'])) {
-                    $this->jsonData['after'][$name]['CHECK_DATE'] = $this->jsonData['previous'][$name]['CHECK_DATE'];
-                }
-                if (isset($data['REPAIR_DATE'])) {
-                    $this->jsonData['after'][$name]['REPAIR_DATE'] = $data['REPAIR_DATE'];
-                } elseif (isset($this->jsonData['previous'][$name]['REPAIR_DATE'])) {
-                    $this->jsonData['after'][$name]['REPAIR_DATE'] = $this->jsonData['previous'][$name]['REPAIR_DATE'];
-                }
-                if (isset($data['ANALYZE_DATE'])) {
-                    $this->jsonData['after'][$name]['ANALYZE_DATE'] = $data['ANALYZE_DATE'];
-                } elseif (isset($this->jsonData['previous'][$name]['ANALYZE_DATE'])) {
-                    $this->jsonData['after'][$name]['ANALYZE_DATE'] = $this->jsonData['previous'][$name]['ANALYZE_DATE'];
-                }
-                if (isset($data['HISTOGRAM_DATE'])) {
-                    $this->jsonData['after'][$name]['HISTOGRAM_DATE'] = $data['HISTOGRAM_DATE'];
-                } elseif (isset($this->jsonData['previous'][$name]['HISTOGRAM_DATE'])) {
-                    $this->jsonData['after'][$name]['HISTOGRAM_DATE'] = $this->jsonData['previous'][$name]['HISTOGRAM_DATE'];
+                foreach (array_keys($this->suggest) as $action) {
+                    $action = mb_strtoupper($action, 'UTF-8');
+                    foreach (['_DATE', '_TIME'] as $postfix) {
+                        $index = $action.$postfix;
+                        if (isset($data[$index])) {
+                            $this->jsonData['after'][$name][$index] = $data[$index];
+                            if (isset($this->jsonData['previous'][$name][$index])) {
+                                $data[$index] = $this->jsonData['previous'][$name][$index];
+                            } else {
+                                unset($data[$index]);
+                            }
+                        } elseif (isset($this->jsonData['previous'][$name][$index])) {
+                            $data[$index] = $this->jsonData['previous'][$name][$index];
+                            $this->jsonData['after'][$name][$index] = $this->jsonData['previous'][$name][$index];
+                        }
+                    }
                 }
                 unset($this->jsonData['before'][$name]['ANALYZE'], $this->jsonData['before'][$name]['CHECK'], $this->jsonData['before'][$name]['COMPRESS'], $this->jsonData['before'][$name]['HISTOGRAM'], $this->jsonData['before'][$name]['OPTIMIZE'], $this->jsonData['before'][$name]['REPAIR'], $this->jsonData['after'][$name]['ANALYZE'], $this->jsonData['after'][$name]['CHECK'], $this->jsonData['after'][$name]['COMPRESS'], $this->jsonData['after'][$name]['HISTOGRAM'], $this->jsonData['after'][$name]['OPTIMIZE'], $this->jsonData['after'][$name]['REPAIR']);
             }
