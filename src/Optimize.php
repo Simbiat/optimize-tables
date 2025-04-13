@@ -1,7 +1,7 @@
 <?php
 declare(strict_types = 1);
 
-namespace Simbiat;
+namespace Simbiat\Database;
 
 use Simbiat\Database\Controller;
 
@@ -10,7 +10,7 @@ use function in_array;
 /**
  * Optimize MySQL tables
  */
-class optimizeTables
+class Optimize
 {
     private object $db_controller;
     #Array of supported features, where every array ket is the feature (or reference to it, at least)
