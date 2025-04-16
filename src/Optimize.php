@@ -3,8 +3,6 @@ declare(strict_types = 1);
 
 namespace Simbiat\Database;
 
-use Simbiat\Database\Controller;
-
 use function in_array;
 
 /**
@@ -85,11 +83,12 @@ class Optimize
     private int $curTime;
     
     /**
+     * @param \PDO|null $dbh PDO object to use for database connection. If not provided, class expects existence of `\Simbiat\Database\Pool` to utilize that instead.
      * @throws \Exception
      */
-    public function __construct()
+    public function __construct(\PDO|null $dbh = null)
     {
-        $this->db_controller = (new Controller());
+        $this->db_controller = (new Controller($dbh));
         #Checking if we are using 'file per table' for INNODB tables
         $innodb_file_per_table = $this->db_controller->selectColumn('SHOW GLOBAL VARIABLES WHERE `variable_name`=\'innodb_file_per_table\';', [], 1)[0];
         #Checking INNODB format

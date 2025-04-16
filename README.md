@@ -22,10 +22,10 @@ This library aims to cover all these points in as smart a manner, as was possibl
 
 # Usage
 
-To use the library you need to establish connection with your database through [SimbiatDB](https://github.com/Simbiat/database) library and then call this:
+To use the library you need to establish connection with your database through [DB Pool](https://github.com/Simbiat/db-pool) library or pass a `PDO` object to constructor and then call this:
 
 ```php
-(new \Simbiat\Database\Optimize)->analyze('schema');
+(new \Simbiat\Database\Optimize($dbh))->analyze('schema');
 ```
 
 The output will look like this:
@@ -71,7 +71,7 @@ array (
 After this you have an option to run them manually if you like some control. Alternatively, if you want to use the library in a `cron` or other scheduler you can run this:
 
 ```php
-(new \Simbiat\Database\Optimize)->optimize('schema');
+(new \Simbiat\Database\Optimize($dbh))->optimize('schema');
 ```
 
 This will analyze the tables and then run the suggested commands. The result of the function (by default) will be an array of log entries, where array keys are UNIX micro timestamps:
@@ -171,7 +171,7 @@ This will also create a `tables.json` file with some more statistics, that will 
 There is also possibility to get statistics from the last run by:
 
 ```php
-(new \Simbiat\Database\Optimize)->showStats();
+(new \Simbiat\Database\Optimize($dbh))->showStats();
 ```
 
 This will show all tables, that were either compressed or had changes in their size statistics.
@@ -179,13 +179,13 @@ This will show all tables, that were either compressed or had changes in their s
 In case you want these statistics to be returned instead of logs, you run this:
 
 ```php
-(new \Simbiat\Database\Optimize)->optimize('schema', true);
+(new \Simbiat\Database\Optimize($dbh))->optimize('schema', true);
 ```
 
 If you want to work with regular booleans, you can send one extra `true`:
 
 ```php
-(new \Simbiat\Database\Optimize)->optimize('schema', true, true);
+(new \Simbiat\Database\Optimize($dbh))->optimize('schema', true, true);
 ```
 
 This is it - easy to use. There are also some settings, that will allow you more control on what is done by `optimize()`.
