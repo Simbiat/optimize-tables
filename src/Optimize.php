@@ -478,9 +478,9 @@ class Optimize
         $action = mb_strtolower($action, 'UTF-8');
         if ($this->checkAction($action)) {
             $verbs = match ($action) {
-                'compress', 'check', 'repair' => ['start' => ucfirst($action).'ing', 'success' => $action.'ed', 'failure' => $action],
+                'compress', 'check', 'repair' => ['start' => mb_ucfirst($action, 'UTF-8').'ing', 'success' => $action.'ed', 'failure' => $action],
                 'histogram' => ['start' => 'Creating histograms for', 'success' => 'created histograms for', 'failure' => 'create histograms for'],
-                'analyze', 'optimize' => ['start' => ucfirst(mb_substr($action, 0, -1, 'UTF-8').'ing'), 'success' => $action.'d', 'failure' => $action],
+                'analyze', 'optimize' => ['start' => mb_ucfirst(mb_substr($action, 0, -1, 'UTF-8').'ing', 'UTF-8'), 'success' => $action.'d', 'failure' => $action],
             };
             if ($fulltext && $this->features_support['set_global']) {
                 $this->log('Enabling FULLTEXT optimization for `'.$name.'`...');
