@@ -10,7 +10,6 @@ use function in_array;
  */
 class Optimize
 {
-    private object $db_controller;
     #Array of supported features, where every array ket is the feature (or reference to it, at least)
     private array $features_support = [
         #Flag for MariaDB in-place defragmentation
@@ -88,7 +87,7 @@ class Optimize
      */
     public function __construct(\PDO|null $dbh = null)
     {
-        $this->db_controller = (new Select($dbh));
+        Common::setDbh($dbh);
         #Checking if we are using 'file per table' for INNODB tables
         $innodb_file_per_table = Select::selectColumn('SHOW GLOBAL VARIABLES WHERE `variable_name`=\'innodb_file_per_table\';', [], 1)[0];
         #Checking INNODB format
@@ -397,7 +396,7 @@ class Optimize
                 foreach ($this->presetting as $query) {
                     $this->log('Attempting to update setting \''.$query.'\'...');
                     try {
-                        $this->db_controller::query($query);
+                        Query::query($query);
                         $this->log('Successfully updated setting.');
                     } catch (\Exception $e) {
                         $this->log('Failed to update setting with error: '.$e->getMessage());
@@ -438,7 +437,7 @@ class Optimize
             foreach ($this->postSetting as $query) {
                 $this->log('Attempting to update setting \''.$query.'\'...');
                 try {
-                    $this->db_controller::query($query);
+                    Query::query($query);
                     $this->log('Successfully updated setting.');
                 } catch (\Exception $e) {
                     $this->log('Failed to update setting with error: '.$e->getMessage());
@@ -487,7 +486,7 @@ class Optimize
             if ($fulltext && $this->features_support['set_global']) {
                 $this->log('Enabling FULLTEXT optimization for `'.$name.'`...');
                 try {
-                    $this->db_controller::query('SET @@GLOBAL.innodb_optimize_fulltext_only=true;');
+                    Query::query('SET @@GLOBAL.innodb_optimize_fulltext_only=true;');
                 } catch (\Exception $e) {
                     #We do not want to cancel everything in case of an issue with just one table
                     $this->log('Failed to enable `innodb_optimize_fulltext_only` on `'.$name.'` with error: '.$e->getMessage());
@@ -497,7 +496,7 @@ class Optimize
             #Get time when action started
             $start = array_key_last($this->jsonData['logs']);
             try {
-                $this->db_controller::query($command);
+                Query::query($command);
             } catch (\Exception $e) {
                 #We do not want to cancel everything in case of an issue with just one table
                 $this->log('Failed to '.$verbs['failure'].' `'.$name.'` with error: '.$e->getMessage());
@@ -528,7 +527,7 @@ class Optimize
             }
             $this->log('Attempting to '.($on ? 'en' : 'dis').'able maintenance mode using \''.$maintenanceQuery.'\'...');
             try {
-                $this->db_controller::query($maintenanceQuery);
+                Query::query($maintenanceQuery);
                 $this->log('Maintenance mode '.($on ? 'en' : 'dis').'abled.');
                 return true;
             } catch (\Exception $e) {
