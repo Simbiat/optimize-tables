@@ -20,8 +20,8 @@
         }
     ],
     "require": {
-        "php": "^8.3",
-        "simbiat/database": "^2",
+        "php": "^8.4",
+        "simbiat/db-query": "^1",
         "ext-mbstring": "*"
     },
     "autoload": {
