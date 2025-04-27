@@ -87,11 +87,11 @@ class Optimize
      */
     public function __construct(\PDO|null $dbh = null)
     {
-        Common::setDbh($dbh);
+        new Query($dbh);
         #Checking if we are using 'file per table' for INNODB tables
-        $innodb_file_per_table = Select::selectColumn('SHOW GLOBAL VARIABLES WHERE `variable_name`=\'innodb_file_per_table\';', [], 1)[0];
+        $innodb_file_per_table = Query::query('SHOW GLOBAL VARIABLES WHERE `variable_name`=\'innodb_file_per_table\';', fetch_argument: 1, return: 'column')[0];
         #Checking INNODB format
-        $innodb_file_format = Select::selectColumn('SHOW GLOBAL VARIABLES WHERE `variable_name`=\'innodb_file_format\';', [], 1)[0] ?? '';
+        $innodb_file_format = Query::query('SHOW GLOBAL VARIABLES WHERE `variable_name`=\'innodb_file_format\';', fetch_argument: 1, return: 'column')[0] ?? '';
         #If we use 'file per table' and 'Barracuda' - it means we can use COMPRESSED as ROW FORMAT
         if (strcasecmp($innodb_file_per_table, 'ON') === 0 && (strcasecmp($innodb_file_format, 'Barracuda') === 0 || $innodb_file_format === '')) {
             $this->features_support['innodb_compress'] = true;
@@ -99,7 +99,7 @@ class Optimize
             $this->features_support['innodb_compress'] = false;
         }
         #Checking if MariaDB is used and if it's new enough to support INNODB Defragmentation
-        $version = Select::selectColumn('SELECT VERSION();')[0];
+        $version = Query::query('SELECT VERSION();', return: 'column')[0];
         if (false !== mb_stripos($version, 'MariaDB', 0, 'UTF-8')) {
             if (version_compare(mb_strtolower($version, 'UTF-8'), '10.1.1-mariadb', 'ge')) {
                 $this->features_support['innodb_defragment'] = true;
@@ -117,7 +117,7 @@ class Optimize
             $this->features_support['histogram'] = true;
         }
         #Check if SET GLOBAL is possible
-        if (Select::count("SELECT COUNT(*) as `count` FROM `information_schema`.`USER_PRIVILEGES` WHERE GRANTEE=CONCAT('\'', SUBSTRING_INDEX(CURRENT_USER(), '@', 1), '\'@\'', SUBSTRING_INDEX(CURRENT_USER(), '@', -1), '\'') AND `PRIVILEGE_TYPE` IN ('SUPER', 'SYSTEM_VARIABLES_ADMIN');") > 0) {
+        if (Query::query("SELECT COUNT(*) as `count` FROM `information_schema`.`USER_PRIVILEGES` WHERE GRANTEE=CONCAT('\'', SUBSTRING_INDEX(CURRENT_USER(), '@', 1), '\'@\'', SUBSTRING_INDEX(CURRENT_USER(), '@', -1), '\'') AND `PRIVILEGE_TYPE` IN ('SUPER', 'SYSTEM_VARIABLES_ADMIN');", return: 'count') > 0) {
             $this->features_support['set_global'] = true;
         }
         $this->curTime = time();
@@ -140,13 +140,13 @@ class Optimize
             $this->schema = $schema;
         }
         #We need to check that the `TEMPORARY` column is available in the `TABLES` table because there are cases when it's not available on shared hosting
-        $tempTableCheck = Select::selectAll('SELECT `COLUMN_NAME` FROM `information_schema`.`COLUMNS` WHERE `TABLE_SCHEMA` = \'information_schema\' AND `TABLE_NAME` = \'TABLES\' AND `COLUMN_NAME` = \'TEMPORARY\';');
+        $tempTableCheck = Query::query('SELECT `COLUMN_NAME` FROM `information_schema`.`COLUMNS` WHERE `TABLE_SCHEMA` = \'information_schema\' AND `TABLE_NAME` = \'TABLES\' AND `COLUMN_NAME` = \'TEMPORARY\';', return: 'all');
         if (!empty($tempTableCheck)) {
             $tempTableCheck = true;
         } else {
             $tempTableCheck = false;
         }
-        $tables = Select::selectAll('SELECT `TABLE_NAME`, `ENGINE`, `ROW_FORMAT`, `TABLE_ROWS`, `DATA_LENGTH`, `INDEX_LENGTH`, `DATA_FREE`, (`DATA_LENGTH`+`INDEX_LENGTH`+`DATA_FREE`) AS `TOTAL_LENGTH`, `DATA_FREE`/(`DATA_LENGTH`+`INDEX_LENGTH`+`DATA_FREE`)*100 AS `FRAGMENTATION`,IF(EXISTS(SELECT `INDEX_TYPE` FROM `information_schema`.`STATISTICS` WHERE `information_schema`.`STATISTICS`.`TABLE_SCHEMA`=`information_schema`.`TABLES`.`TABLE_SCHEMA` AND `information_schema`.`STATISTICS`.`TABLE_NAME`=`information_schema`.`TABLES`.`TABLE_NAME` AND `INDEX_TYPE` LIKE \'%FULLTEXT%\'), TRUE, FALSE) AS `FULLTEXT` FROM `information_schema`.`TABLES` WHERE `TABLE_SCHEMA`=\''.$this->schema.'\''.($tempTableCheck ? 'AND `TEMPORARY`!=\'Y\'' : '').' ORDER BY `TABLE_NAME`;');
+        $tables = Query::query('SELECT `TABLE_NAME`, `ENGINE`, `ROW_FORMAT`, `TABLE_ROWS`, `DATA_LENGTH`, `INDEX_LENGTH`, `DATA_FREE`, (`DATA_LENGTH`+`INDEX_LENGTH`+`DATA_FREE`) AS `TOTAL_LENGTH`, `DATA_FREE`/(`DATA_LENGTH`+`INDEX_LENGTH`+`DATA_FREE`)*100 AS `FRAGMENTATION`,IF(EXISTS(SELECT `INDEX_TYPE` FROM `information_schema`.`STATISTICS` WHERE `information_schema`.`STATISTICS`.`TABLE_SCHEMA`=`information_schema`.`TABLES`.`TABLE_SCHEMA` AND `information_schema`.`STATISTICS`.`TABLE_NAME`=`information_schema`.`TABLES`.`TABLE_NAME` AND `INDEX_TYPE` LIKE \'%FULLTEXT%\'), TRUE, FALSE) AS `FULLTEXT` FROM `information_schema`.`TABLES` WHERE `TABLE_SCHEMA`=\''.$this->schema.'\''.($tempTableCheck ? 'AND `TEMPORARY`!=\'Y\'' : '').' ORDER BY `TABLE_NAME`;', return: 'all');
         #Replacing numeric keys with actual tables' names for future use with JSON data
         $tables = array_column($tables, null, 'TABLE_NAME');
         #Setting pre-optimization settings
@@ -205,7 +205,7 @@ class Optimize
                 }
                 if ($tables[$name]['TO_HISTOGRAM']) {
                     if ($this->features_support['histogram']) {
-                        $columns = Select::selectColumn('SELECT `COLUMN_NAME` FROM `information_schema`.`COLUMNS` WHERE `TABLE_SCHEMA`=\''.$this->schema.'\' AND `TABLE_NAME`=\''.$table['TABLE_NAME'].'\' AND `GENERATION_EXPRESSION` IS NULL AND `COLUMN_KEY` IN (\'\', \'MUL\') AND `DATA_TYPE` NOT IN (\'JSON\', \'GEOMETRY\', \'POINT\', \'LINESTRING\', \'POLYGON\', \'MULTIPOINT\', \'MULTILINESTRING\', \'MULTIPOLYGON\', \'GEOMETRYCOLLECTION\')'.(empty($this->getExclusions('histogram')[$name]) ? '' : ' AND `COLUMN_NAME` NOT IN(\''.implode('\' \'', $this->getExclusions('histogram')[$name]).'\')'));
+                        $columns = Query::query('SELECT `COLUMN_NAME` FROM `information_schema`.`COLUMNS` WHERE `TABLE_SCHEMA`=\''.$this->schema.'\' AND `TABLE_NAME`=\''.$table['TABLE_NAME'].'\' AND `GENERATION_EXPRESSION` IS NULL AND `COLUMN_KEY` IN (\'\', \'MUL\') AND `DATA_TYPE` NOT IN (\'JSON\', \'GEOMETRY\', \'POINT\', \'LINESTRING\', \'POLYGON\', \'MULTIPOINT\', \'MULTILINESTRING\', \'MULTIPOLYGON\', \'GEOMETRYCOLLECTION\')'.(empty($this->getExclusions('histogram')[$name]) ? '' : ' AND `COLUMN_NAME` NOT IN(\''.implode('\' \'', $this->getExclusions('histogram')[$name]).'\')'), return: 'column');
                         if ($columns) {
                             $tables[$name]['HISTOGRAM'] = 'ANALYZE TABLE `'.$this->schema.'`.`'.$table['TABLE_NAME'].'` UPDATE HISTOGRAM ON `'.implode('`, `', $columns).'`';
                             $tables[$name]['COMMANDS'][] = $tables[$name]['HISTOGRAM'];
