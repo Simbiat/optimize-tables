@@ -333,7 +333,7 @@ class Optimize
                 return $this->showStats();
             }
             return $this->jsonData['logs'];
-        } catch (\Exception $e) {
+        } catch (\Throwable $e) {
             return $e->getMessage()."\r\n".$e->getTraceAsString();
         }
     }
@@ -398,7 +398,7 @@ class Optimize
                     try {
                         Query::query($query);
                         $this->log('Successfully updated setting.');
-                    } catch (\Exception $e) {
+                    } catch (\Throwable $e) {
                         $this->log('Failed to update setting with error: '.$e->getMessage());
                     }
                 }
@@ -439,7 +439,7 @@ class Optimize
                 try {
                     Query::query($query);
                     $this->log('Successfully updated setting.');
-                } catch (\Exception $e) {
+                } catch (\Throwable $e) {
                     $this->log('Failed to update setting with error: '.$e->getMessage());
                 }
             }
@@ -487,7 +487,7 @@ class Optimize
                 $this->log('Enabling FULLTEXT optimization for `'.$name.'`...');
                 try {
                     Query::query('SET @@GLOBAL.innodb_optimize_fulltext_only=true;');
-                } catch (\Exception $e) {
+                } catch (\Throwable $e) {
                     #We do not want to cancel everything in case of an issue with just one table
                     $this->log('Failed to enable `innodb_optimize_fulltext_only` on `'.$name.'` with error: '.$e->getMessage());
                 }
@@ -497,7 +497,7 @@ class Optimize
             $start = array_key_last($this->jsonData['logs']);
             try {
                 Query::query($command);
-            } catch (\Exception $e) {
+            } catch (\Throwable $e) {
                 #We do not want to cancel everything in case of an issue with just one table
                 $this->log('Failed to '.$verbs['failure'].' `'.$name.'` with error: '.$e->getMessage());
             }
@@ -530,7 +530,7 @@ class Optimize
                 Query::query($maintenanceQuery);
                 $this->log('Maintenance mode '.($on ? 'en' : 'dis').'abled.');
                 return true;
-            } catch (\Exception $e) {
+            } catch (\Throwable $e) {
                 $this->log('Failed to '.($on ? 'en' : 'dis').'able maintenance mode using \''.$maintenanceQuery.'\' with error: '.$e->getMessage());
                 return false;
             }
