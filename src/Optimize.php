@@ -205,7 +205,7 @@ class Optimize
                 }
                 if ($tables[$name]['TO_HISTOGRAM']) {
                     if ($this->features_support['histogram']) {
-                        $columns = Query::query('SELECT `COLUMN_NAME` FROM `information_schema`.`COLUMNS` WHERE `TABLE_SCHEMA`=\''.$this->schema.'\' AND `TABLE_NAME`=\''.$table['TABLE_NAME'].'\' AND `GENERATION_EXPRESSION` IS NULL AND `COLUMN_KEY` IN (\'\', \'MUL\') AND `DATA_TYPE` NOT IN (\'JSON\', \'GEOMETRY\', \'POINT\', \'LINESTRING\', \'POLYGON\', \'MULTIPOINT\', \'MULTILINESTRING\', \'MULTIPOLYGON\', \'GEOMETRYCOLLECTION\')'.(empty($this->getExclusions('histogram')[$name]) ? '' : ' AND `COLUMN_NAME` NOT IN(\''.implode('\' \'', $this->getExclusions('histogram')[$name]).'\')'), return: 'column');
+                        $columns = Query::query('SELECT `COLUMN_NAME` FROM `information_schema`.`COLUMNS` WHERE `TABLE_SCHEMA`=\''.$this->schema.'\' AND `TABLE_NAME`=\''.$table['TABLE_NAME'].'\' AND `GENERATION_EXPRESSION` IS NULL AND `COLUMN_KEY` IN (\'\', \'MUL\') AND `DATA_TYPE` NOT IN (\'JSON\', \'GEOMETRY\', \'POINT\', \'LINESTRING\', \'POLYGON\', \'MULTIPOINT\', \'MULTILINESTRING\', \'MULTIPOLYGON\', \'GEOMETRYCOLLECTION\')'.(empty($this->getExclusions('histogram')[$name]) ? '' : ' AND `COLUMN_NAME` NOT IN(:columName)'), (empty($this->getExclusions('histogram')[$name]) ? [] : $this->getExclusions('histogram')[$name]), return: 'column');
                         if ($columns) {
                             $tables[$name]['HISTOGRAM'] = 'ANALYZE TABLE `'.$this->schema.'`.`'.$table['TABLE_NAME'].'` UPDATE HISTOGRAM ON `'.implode('`, `', $columns).'`';
                             $tables[$name]['COMMANDS'][] = $tables[$name]['HISTOGRAM'];
