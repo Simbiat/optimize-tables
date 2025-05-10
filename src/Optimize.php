@@ -214,13 +214,14 @@ class Optimize
                 $tables[$name]['TO_OPTIMIZE'] = false;
                 $tables[$name]['TO_REPAIR'] = false;
             } else {
-                $tables[$name]['TO_ANALYZE'] = $this->checkAdd('analyze', $table);
                 $tables[$name]['TO_CHECK'] = $this->checkAdd('check', $table);
                 $tables[$name]['TO_HISTOGRAM'] = $this->checkAdd('histogram', $table);
                 $tables[$name]['TO_OPTIMIZE'] = $this->checkAdd('optimize', $table);
+                $table['TO_OPTIMIZE'] = $tables[$name]['TO_OPTIMIZE'];
+                $tables[$name]['TO_ANALYZE'] = $this->checkAdd('analyze', $table);
                 $tables[$name]['TO_REPAIR'] = $this->checkAdd('repair', $table);
             }
-            #If the table is InnoDB and compression is possible and allowed - suggest compression only, since OPTIMIZE will be redundant after this. This also will not work
+            #If the table is InnoDB and compression is possible and allowed - suggest compression only, since OPTIMIZE will be redundant after this
             if ($tables[$name]['TO_COMPRESS']) {
                 if ($this->features_support['alter_algorithm'] && (int)$tables[$name]['FULLTEXT'] > 1) {
                     #InnoDB does not support table INPLACE rebuild when there are multiple FULLTEXT indexes, thus we have to use COPY algorithm
@@ -231,6 +232,14 @@ class Optimize
                 $tables[$name]['COMMANDS'][] = $tables[$name]['COMPRESS'];
             } else {
                 #If we are not compressing and the table has actual rows - add CHECK, REPAIR, ANALYZE and Histograms if they are allowed and supported
+                if ($tables[$name]['TO_CHECK']) {
+                    $tables[$name]['CHECK'] = 'CHECK TABLE `'.$this->schema.'`.`'.$table['TABLE_NAME'].'` FOR UPGRADE EXTENDED;';
+                    $tables[$name]['COMMANDS'][] = $tables[$name]['CHECK'];
+                }
+                if ($tables[$name]['TO_REPAIR']) {
+                    $tables[$name]['REPAIR'] = 'REPAIR TABLE `'.$this->schema.'`.`'.$table['TABLE_NAME'].'` EXTENDED;';
+                    $tables[$name]['COMMANDS'][] = $tables[$name]['REPAIR'];
+                }
                 if ($tables[$name]['TO_OPTIMIZE']) {
                     #Add fulltext_only optimization if a table has fulltext indexes
                     if (!$auto && $this->features_support['set_global']) {
@@ -242,14 +251,6 @@ class Optimize
                     }
                     $tables[$name]['OPTIMIZE'] = 'OPTIMIZE TABLE `'.$this->schema.'`.`'.$table['TABLE_NAME'].'`;';
                     $tables[$name]['COMMANDS'][] = $tables[$name]['OPTIMIZE'];
-                }
-                if ($tables[$name]['TO_CHECK']) {
-                    $tables[$name]['CHECK'] = 'CHECK TABLE `'.$this->schema.'`.`'.$table['TABLE_NAME'].'` FOR UPGRADE EXTENDED;';
-                    $tables[$name]['COMMANDS'][] = $tables[$name]['CHECK'];
-                }
-                if ($tables[$name]['TO_REPAIR']) {
-                    $tables[$name]['REPAIR'] = 'REPAIR TABLE `'.$this->schema.'`.`'.$table['TABLE_NAME'].'` EXTENDED;';
-                    $tables[$name]['COMMANDS'][] = $tables[$name]['REPAIR'];
                 }
                 if ($tables[$name]['TO_ANALYZE']) {
                     $tables[$name]['ANALYZE'] = 'ANALYZE TABLE `'.$this->schema.'`.`'.$table['TABLE_NAME'].'`;';
@@ -761,7 +762,7 @@ class Optimize
                     }
                     break;
                 case 'analyze':
-                    if ($this->suggest['analyze'] && $this->checkAge('ANALYZE', ($this->jsonData['previous'][$table['TABLE_NAME']]['ANALYZE_DATE'] ?? 0)) && $this->checkChange($table, true)) {
+                    if ($this->suggest['analyze'] && !$table['TO_OPTIMIZE'] && $this->checkAge('ANALYZE', ($this->jsonData['previous'][$table['TABLE_NAME']]['ANALYZE_DATE'] ?? 0)) && $this->checkChange($table, true)) {
                         return true;
                     }
                     break;
