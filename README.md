@@ -4,16 +4,16 @@ This library is developed to allow bulk optimization of tables in MySQL (MariaDB
 
 # Benefits
 
-One may think that simply getting list of tables and running OPTIMIZE against them is enough, but in reality, it's not that simple:
+One may think that simply getting a list of tables and running OPTIMIZE against them is enough, but in reality, it's not that simple:
 
 - Not all tables support OPTIMIZE.
 - There are some special parameters that may improve OPTIMIZE results in some cases.
 - Some tables may benefit from CHECK and REPAIR commands as well. In fact, it's useful to periodically run CHECK to avoid potential corruption of a table.
-- ANALYZE is quite useful a command as well, allowing to update MySQL statistics, that may improve some of SELECT.
-- MariaDB 10.4+ and MySQL 8.0+ also support histograms, that may improve SELECT in cases when a column does not have indexes for some reason.
-- No matter how useful these commands are, there are cases when you do not need to run them, especially on large tables, since they may take quite some time to complete. The simplest case: there were no or very little changes since last time the OPTIMIZE was run.
+- ANALYZE is quite a useful command as well, allowing to update MySQL statistics that may improve some of SELECT.
+- MariaDB 10.4+ and MySQL 8.0+ also support histograms that may improve SELECT in cases when a column does not have indexes for some reason.
+- No matter how useful these commands are, there are cases when you do not need to run them, especially on large tables, since they may take quite some time to complete. The simplest case: there have been no or very few changes since the last time the OPTIMIZE was run.
 
-This library aims to cover all these points in as smart a manner, as was possible at the moment of writing. For details refer Usage section of this readme or comments in the code.
+This library aims to cover all these points in as smart a manner as was possible at the moment of writing. For details refer to the Usage section of this readme or comments in the code.
 
 # Requirements
 
@@ -22,7 +22,7 @@ This library aims to cover all these points in as smart a manner, as was possibl
 
 # Usage
 
-To use the library you need to establish connection with your database through [DB Pool](https://github.com/Simbiat/db-pool) library or pass a `PDO` object to constructor and then call this:
+To use the library, you need to establish connection with your database through [DB Pool](https://github.com/Simbiat/db-pool) library or pass a `PDO` object to constructor and then call this:
 
 ```php
 (new \Simbiat\Database\Optimize($dbh))->analyze('schema');
@@ -67,8 +67,8 @@ array (
 )
 ```
 
-`schema` means the name of the database/schema you want to analyze. This command will show you the list (as an array) of tables with some statistics and list of optimization commands they can/should be run for each table.
-After this you have an option to run them manually if you like some control. Alternatively, if you want to use the library in a `cron` or other scheduler you can run this:
+`schema` means the name of the database/schema you want to analyze. This command will show you the list (as an array) of tables with some statistics and a list of optimization commands they can/should be run for each table.
+After this you can run them manually if you like some control. Alternatively, if you want to use the library in a `cron` or other scheduler you can run this:
 
 ```php
 (new \Simbiat\Database\Optimize($dbh))->optimize('schema');
@@ -168,13 +168,13 @@ This will also create a `tables.json` file with some more statistics, that will 
 }
 ```
 
-There is also possibility to get statistics from the last run by:
+There is also the possibility to get statistics from the last run by:
 
 ```php
-(new \Simbiat\Database\Optimize($dbh))->showStats();
+(new \Simbiat\Database\Optimize($dbh))->statistics;
 ```
 
-This will show all tables, that were either compressed or had changes in their size statistics.
+This will show all tables that were either compressed or had changes in their size statistics.
 
 In case you want these statistics to be returned instead of logs, you run this:
 
@@ -188,50 +188,56 @@ If you want to work with regular booleans, you can send one extra `true`:
 (new \Simbiat\Database\Optimize($dbh))->optimize('schema', true, true);
 ```
 
-This is it - easy to use. There are also some settings, that will allow you more control on what is done by `optimize()`.
+If you just want to get the suggested commands, run this to get an array of arrays:
+
+```php
+(new \Simbiat\Database\Optimize($dbh))->getCommands('schema');
+```
+
+This is it — easy to use. There are also some settings, that will allow you more control on what is done by `optimize()`.
 
 # Settings
 
-All settings can be chained together. To check current setting, you can replace `set` with `get` in the function name and remove parameter, which actually sets the value.
+All settings can be chained together. To check the current setting — access the respective variable.
 <table>
     <tr>
-        <th>Function</th>
-        <th>Parameters</th>
+        <th>Setter</th>
+        <th>Variable name</th>
         <th>Description</th>
     </tr>
     <tr>
-        <td><code>setThreshold</code></td>
-        <td><code>float $threshold</code></td>
-        <td>Set a threshold for fragmentation of table data. If the current value is more or equal to this value - table will be suggested for OPTIMIZE.</td>
+        <td><code>setThreshold(float $threshold)</code></td>
+        <td><code>$threshold</code></td>
+        <td>Set a threshold for fragmentation of table data. If the current value equals or is greater — table will be suggested for OPTIMIZE.</td>
     </tr>
     <tr>
-        <td><code>setSuggest</code></td>
-        <td><code>string $action, bool $flag</code></td>
+        <td><code>setSuggest(string $action, bool $flag)</code></td>
+        <td><code>$suggest</code></td>
         <td>Flag allowing to suggest a command if flag is set to `true`. `$action` stands for appropriate command: `ANALYZE`, `CHECK`, `COMPRESS`, `OPTIMIZE`, `REPAIR` and `HISTOGRAM` (special case of `ANALYZE`).</td>
     </tr>
     <tr>
-        <td><code>setJsonPath</code></td>
-        <td><code>string $jsonpath</code></td>
-        <td>Path to save statistics, which are necessary for all consecutive runs. By default file `tables.json` will be written to system's temporary folder.</td>
+        <td><code>setJsonPath(string $jsonpath)</code></td>
+        <td><code>$jsonpath</code></td>
+        <td>Path to save statistics, which are necessary for all consecutive runs. By default, the file `tables.json` will be written to the system's temporary folder.</td>
     </tr>
     <tr>
-        <td><code>setDefragParam</code></td>
-        <td><code>string $param, float $value</code></td>
-        <td>MariaDB 10.1.1 implemented `innodb_defragment` flag with a set of settings for it. All of them can be set through this function, if non-default are required. Their names can be sent without the `innodb_defragment` prefix.</td>
+        <td><code>setDefragParam(string $param, float $value)</code></td>
+        <td><code>$defragParams</code></td>
+        <td>MariaDB 10.1.1 implemented the `innodb_defragment` flag with a set of settings for it. All of them can be set through this function if non-default is required. Their names can be sent without the `innodb_defragment` prefix.</td>
     </tr>
     <tr>
-        <td><code>setMaintenance</code></td>
-        <td><code>string $table, string $setting_column, string $setting_name, string $value_column</code></td>
-        <td>Library can take quite some time to run and some commands may lock tables (fully or not), so it's advisable to prevent applications from communicating with them. Usually this is handled by having some kind of system parameter identifying an ongoing maintenance. `$table` stands for table name, `$setting_column` - name of the column where to search for `$setting_name`, that is name of the maintenance flag. `$value_column` is name of the column, which we will be updating.</td>
+        <td><code>setMaintenance(string $table, string $setting_column, string $setting_name, string $value_column)</code></td>
+        <td><code>$maintenanceFlag</code></td>
+        <td>Library can take quite some time to run, and some commands may lock tables (fully or not), so it's advisable to prevent applications from communicating with them. Usually this is handled by having some kind of system parameter identifying an ongoing maintenance. `$table` stands for table name, `$setting_column` — the name of the column where to search for `$setting_name`, that is the name of the maintenance flag. `$value_column` is the name of the column, which we will be updating.</td>
     </tr>
     <tr>
-        <td><code>setDays</code></td>
-        <td><code>string $action, int $days</code></td>
-        <td>Set number of days to wait since previous run of an `$action` (same as in `setSuggest`). Unless the designated amount of time has passed the action will not be suggested for the table.</td>
+        <td><code>setDays(string $action, int $days)</code></td>
+        <td><code>$days</code></td>
+        <td>Set the number of days to wait since the previous run of an `$action` (same as in `setSuggest`). Unless the designated amount of time has passed, the action will not be suggested for the table.</td>
     </tr>
     <tr>
-        <td><code>setExclusions</code></td>
-        <td><code>string $action, string $table, $column = NULL</code></td>
-        <td>Exclude table(s) from processing for particular `$action`. In case of `histogram` you can also send list of columns to exclude from preparing histograms if we are on MySQL 8.0+. In order to avoid providing excessive columns to histograms' exclusion list, adding only 1 table at a time is allowed.</td>
+        <td><code>setExclusions(string $action, string $table, $column = NULL)</code></td>
+        <td><code>$exclude</code></td>
+        <td>Exclude table(s) from processing for a particular `$action`. In the case of `histogram` you can also send a list of columns to exclude from preparing histograms if we are on MySQL 8.0+. To avoid providing excessive columns to histograms' exclusion list, adding only one table at a time is allowed.</td>
     </tr>
 </table>
