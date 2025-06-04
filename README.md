@@ -1,3 +1,6 @@
+> [!WARNING]  
+> This library has been replaced by [DB Maintainer](https://github.com/Simbiat/db-maintainer) and is no longer maintained, but latest release should still work.
+
 # Database Tables Optimizer
 
 This library is developed to allow bulk optimization of tables in MySQL (MariaDB and, potentially, other forks). While MS SQL has its Maintenance Plan Wizard, there is nothing like that for MySQL.
